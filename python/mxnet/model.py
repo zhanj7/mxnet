@@ -17,6 +17,7 @@ from .initializer import Uniform
 from collections import namedtuple
 from .optimizer import get_updater
 from .executor_manager import DataParallelExecutorManager, _check_arguments, _load_data
+import pdb
 
 BASE_ESTIMATOR = object
 
@@ -219,7 +220,6 @@ def _train_multi_device(symbol, ctx, arg_names, param_names, aux_names,
             do_reset = True
             for data_batch in train_data:
                 executor_manager.load_data_batch(data_batch)
-
                 if monitor is not None:
                     monitor.tic()
 
@@ -268,9 +268,9 @@ def _train_multi_device(symbol, ctx, arg_names, param_names, aux_names,
             # this epoch is done
             if epoch_size is None or nbatch >= epoch_size:
                 break
-
-        name, value = eval_metric.get()
-        logger.info('Epoch[%d] Train-%s=%f', epoch, name, value)
+        
+        logger.info('Epoch[%d] training', epoch)
+        eval_metric.print_log()
         toc = time.time()
         logger.info('Epoch[%d] Time cost=%.3f', epoch, (toc - tic))
 
@@ -302,8 +302,8 @@ def _train_multi_device(symbol, ctx, arg_names, param_names, aux_names,
                             call(batch_end_params)
                     else:
                         eval_batch_end_callback(batch_end_params)
-            name, value = eval_metric.get()
-            logger.info('Epoch[%d] Validation-%s=%f', epoch, name, value)
+            logger.info('Epoch[%d] validation', epoch)
+            eval_metric.print_log()
     # end of all epochs
     return
 
@@ -327,7 +327,7 @@ def save_checkpoint(prefix, epoch, symbol, arg_params, aux_params):
     - ``prefix-symbol.json`` will be saved for symbol.
     - ``prefix-epoch.params`` will be saved for parameters.
     """
-    symbol.save('%s-symbol.json' % prefix)
+    #symbol.save('%s-symbol.json' % prefix)
     save_dict = {('arg:%s' % k) : v for k, v in arg_params.items()}
     save_dict.update({('aux:%s' % k) : v for k, v in aux_params.items()})
     param_name = '%s-%04d.params' % (prefix, epoch)
