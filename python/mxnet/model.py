@@ -16,7 +16,7 @@ from .context import Context, cpu
 from .initializer import Uniform
 from collections import namedtuple
 from .optimizer import get_updater
-from .executor_manager import DataParallelExecutorManager, _check_arguments, _load_data
+from .executor_manager import DataParallelExecutorManager, _check_arguments, _load_data, _load_label
 import pdb
 
 BASE_ESTIMATOR = object
@@ -630,6 +630,37 @@ class FeedForward(BASE_ESTIMATOR):
             return outputs, data, label
         else:
             return outputs
+
+    def iter_predict(self, X, num_batch=None, return_data=False, reset=True):
+        """
+        A hack for generator style prediction
+        """
+        X = self._init_iter(X, None, is_train=False)
+        if reset:
+            X.reset()
+        arg_names, param_names, aux_names = \
+                self._init_params(dict(X.provide_data+X.provide_label))
+        self.kwargs["arg_names"] = arg_names
+        data_shapes = X.provide_data
+        data_names = [x[0] for x in data_shapes]
+        label_names = [x[0] for x in X.provide_label]
+        self._init_predictor(data_shapes)
+        batch_size = X.batch_size
+        data_arrays = [self._pred_exec.arg_dict[name] for name in data_names]
+        label_arrays = [self._pred_exec.arg_dict[name] for name in label_names]
+        i = 0
+        for batch in X:
+            if num_batch is not None and i == num_batch:
+                break
+            i += 1
+
+            _load_data(batch, data_arrays)
+            _load_label(batch, label_arrays)            
+            self._pred_exec.forward(is_train=False)
+            padded = batch.pad
+            real_size = batch_size - padded            
+            yield self._pred_exec.arg_dict['data'].asnumpy(), [o_nd[0:real_size].asnumpy() for o_nd in self._pred_exec.outputs], \
+                  self._pred_exec.arg_dict['classification_label'].asnumpy()
 
     def score(self, X, eval_metric='acc', num_batch=None, batch_end_callback=None, reset=True):
         """Run the model on X and calculate the score with eval_metric
