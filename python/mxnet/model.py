@@ -647,7 +647,6 @@ class FeedForward(BASE_ESTIMATOR):
         self._init_predictor(data_shapes)
         batch_size = X.batch_size
         data_arrays = [self._pred_exec.arg_dict[name] for name in data_names]
-        label_arrays = [self._pred_exec.arg_dict[name] for name in label_names]
         i = 0
         for batch in X:
             if num_batch is not None and i == num_batch:
@@ -655,12 +654,10 @@ class FeedForward(BASE_ESTIMATOR):
             i += 1
 
             _load_data(batch, data_arrays)
-            _load_label(batch, label_arrays)            
             self._pred_exec.forward(is_train=False)
             padded = batch.pad
             real_size = batch_size - padded            
-            yield self._pred_exec.arg_dict['data'].asnumpy(), [o_nd[0:real_size].asnumpy() for o_nd in self._pred_exec.outputs], \
-                  self._pred_exec.arg_dict['classification_label'].asnumpy()
+            yield self._pred_exec.arg_dict['data'].asnumpy(), [o_nd[0:real_size].asnumpy() for o_nd in self._pred_exec.outputs]
 
     def score(self, X, eval_metric='acc', num_batch=None, batch_end_callback=None, reset=True):
         """Run the model on X and calculate the score with eval_metric
