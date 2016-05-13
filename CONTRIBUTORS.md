@@ -103,3 +103,6 @@ List of Contributors
 * [Dan Becker](https://github.com/dansbecker)
 * [Yun Yan](https://github.com/Puriney)
 * [Tao Wei](https://github.com/taoari)
+* [Max Kuhn](https://github.com/topepo)
+* [Yuqi Li](https://github.com/ziyeqinghan)
+* [Depeng Liang](https://github.com/Ldpe2G)
