@@ -98,6 +98,8 @@ class SoftmaxOutputOp : public Operator {
       Tensor<xpu, 2, DType> label = in_data[softmaxout_enum::kLabel].FlatTo2D<xpu, DType>(s);
       Tensor<xpu, 3, DType> out =
           out_data[softmaxout_enum::kOut].get_with_shape<xpu, 3, DType>(s3, s);
+      Tensor<xpu, 3, DType> o_grad =
+          out_grad[softmaxout_enum::kOut].get_with_shape<xpu, 3, DType>(s3, s);
       Tensor<xpu, 3, DType> grad =
           in_grad[softmaxout_enum::kData].get_with_shape<xpu, 3, DType>(s3, s);
       if (param_.use_ignore) {
@@ -105,7 +107,9 @@ class SoftmaxOutputOp : public Operator {
       } else {
           SoftmaxGrad(grad, out, label);
       }
-      grad *= DType(param_.grad_scale/s3[2]);
+//     grad *= DType(param_.grad_scale/s3[2]);
+      grad *= DType(param_.grad_scale);
+      grad *= o_grad;
     } else {
       const TShape& label_shape = in_data[softmaxout_enum::kLabel].shape_;
       Tensor<xpu, 1, DType> label = in_data[softmaxout_enum::kLabel].get_with_shape<xpu, 1, DType>(
@@ -199,7 +203,7 @@ class SoftmaxOutputProp : public OperatorProperty {
     const std::vector<int> &out_grad,
     const std::vector<int> &in_data,
     const std::vector<int> &out_data) const override {
-    return {in_data[softmaxout_enum::kLabel], out_data[softmaxout_enum::kOut]};
+    return {out_grad[softmaxout_enum::kOut], in_data[softmaxout_enum::kLabel], out_data[softmaxout_enum::kOut]};
   }
 
   std::vector<std::pair<int, void*> > BackwardInplaceOption(
