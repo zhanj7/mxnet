@@ -252,9 +252,8 @@ namespace mxnet {
                                                                 const std::vector<int> &in_data,
                                                                 const std::vector<int> &out_data,
                                                                 const std::vector<void*> &in_grad) const override {
-//	return {{out_data[assignsample::kClsout], in_grad[assignsample::kClsdata]},
-//	    {out_data[assignsample::kRegout], in_grad[assignsample::kRegdata]}};
-        return {};
+	return {{out_data[assignsample::kClsout], in_grad[assignsample::kClsdata]},
+	    {out_data[assignsample::kRegout], in_grad[assignsample::kRegdata]}};
       }
 
       std::vector<std::pair<int, void*> > ForwardInplaceOption(const std::vector<int> &in_data,
