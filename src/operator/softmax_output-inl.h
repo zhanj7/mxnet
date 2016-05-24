@@ -30,6 +30,7 @@ struct SoftmaxOutputParam : public dmlc::Parameter<SoftmaxOutputParam> {
   float ignore_label;
   bool multi_output;
   bool use_ignore;
+  bool is_hidden_layer;
   DMLC_DECLARE_PARAMETER(SoftmaxOutputParam) {
     DMLC_DECLARE_FIELD(grad_scale).set_default(1.0f)
     .describe("Scale the gradient by a float factor");
@@ -43,6 +44,8 @@ struct SoftmaxOutputParam : public dmlc::Parameter<SoftmaxOutputParam> {
     DMLC_DECLARE_FIELD(use_ignore).set_default(false)
     .describe("If set to true, the ignore_label value will not contribute "
       "to the backward gradient");
+    DMLC_DECLARE_FIELD(is_hidden_layer).set_default(false)
+    .describe("If set to true, out_grad is needed in backward");
   };
 };
 
@@ -105,7 +108,15 @@ class SoftmaxOutputOp : public Operator {
       } else {
           SoftmaxGrad(grad, out, label);
       }
-      grad *= DType(param_.grad_scale/s3[2]);
+      if (!param_.is_hidden_layer) {
+        grad *= DType(param_.grad_scale/s3[2]);
+      }
+      else {
+        Tensor<xpu, 3, DType> o_grad =
+          out_grad[softmaxout_enum::kOut].get_with_shape<xpu, 3, DType>(s3, s);
+        grad *= DType(param_.grad_scale);
+        grad *= o_grad;
+      }
     } else {
       const TShape& label_shape = in_data[softmaxout_enum::kLabel].shape_;
       Tensor<xpu, 1, DType> label = in_data[softmaxout_enum::kLabel].get_with_shape<xpu, 1, DType>(
@@ -199,9 +210,13 @@ class SoftmaxOutputProp : public OperatorProperty {
     const std::vector<int> &out_grad,
     const std::vector<int> &in_data,
     const std::vector<int> &out_data) const override {
-    return {in_data[softmaxout_enum::kLabel], out_data[softmaxout_enum::kOut]};
+    if (param_.is_hidden_layer) {
+      return {out_grad[softmaxout_enum::kOut], in_data[softmaxout_enum::kLabel], out_data[softmaxout_enum::kOut]};
+    }
+    else {
+      return {in_data[softmaxout_enum::kLabel], out_data[softmaxout_enum::kOut]};
+    }
   }
-
   std::vector<std::pair<int, void*> > BackwardInplaceOption(
     const std::vector<int> &out_grad,
     const std::vector<int> &in_data,
