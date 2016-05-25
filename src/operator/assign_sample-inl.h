@@ -129,7 +129,7 @@ class AssignSampleOp : public Operator {
     Tensor<xpu, 4> regmask = ctx.requested[assignsample::kTempSpace].get_space<xpu>(s4, s);
     Tensor<cpu, 4> regmask_cpu = NewTensor<cpu, real_t>(s4, 0.0f);
     for (int i = 0; i < param_.anchor_num; ++i) {
-      for (int j = i*4; j < (i+1)*4; ++j) {
+      for (int j = i * 4; j < (i + 1) * 4; ++j) {
         regmask_cpu[0][j] += mask_reshape[0][i];
       }
     }
@@ -168,7 +168,9 @@ class AssignSampleOp : public Operator {
     Copy(maskout_cpu, maskout, s);
     int p_count = 0;
     for (int i = 0; i < maskout_cpu.size(1); ++i) {
-      if (maskout_cpu[0][i] == 1) { p_count += 1; }
+      if (maskout_cpu[0][i] == 1) {
+        p_count += 1;
+      }
     }
 
     Shape<2> dshape2 = Shape2(2, out_data[assignsample::kMaskout].Size());
