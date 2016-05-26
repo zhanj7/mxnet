@@ -110,8 +110,7 @@ class SoftmaxOutputOp : public Operator {
       }
       if (!param_.is_hidden_layer) {
         grad *= DType(param_.grad_scale/s3[2]);
-      }
-      else {
+      } else {
         Tensor<xpu, 3, DType> o_grad =
           out_grad[softmaxout_enum::kOut].get_with_shape<xpu, 3, DType>(s3, s);
         grad *= DType(param_.grad_scale);
@@ -211,9 +210,9 @@ class SoftmaxOutputProp : public OperatorProperty {
     const std::vector<int> &in_data,
     const std::vector<int> &out_data) const override {
     if (param_.is_hidden_layer) {
-      return {out_grad[softmaxout_enum::kOut], in_data[softmaxout_enum::kLabel], out_data[softmaxout_enum::kOut]};
-    }
-    else {
+      return {out_grad[softmaxout_enum::kOut],
+              in_data[softmaxout_enum::kLabel], out_data[softmaxout_enum::kOut]};
+    } else {
       return {in_data[softmaxout_enum::kLabel], out_data[softmaxout_enum::kOut]};
     }
   }
