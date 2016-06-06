@@ -122,7 +122,7 @@ inline void KeywordArgumentMismatch(const char *source,
   }
 
   for (const auto& key : user_args) {
-    if (keys.count(key) == 0) {
+    if (keys.count(key) == 0 && key.substr(key.size() - 5, 5) != "label") {
       LOG(FATAL) << source
                  << "Keyword argument name " << key << " not found."
                  << msg.str();
