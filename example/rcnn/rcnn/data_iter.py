@@ -1,6 +1,8 @@
 import mxnet as mx
 import numpy as np
 import minibatch
+from mxnet.executor_manager import _split_input_slice
+from helper.processing.image_processing import tensor_vstack
 
 
 class ROIIter(mx.io.DataIter):
@@ -92,6 +94,14 @@ class ROIIter(mx.io.DataIter):
         utilize minibatch sampling, e.g. 2 images and 64 rois per image
         :return: training batch (e.g. 128 samples)
         """
+        work_load_list = self.work_load_list
+        ctx = self.ctx
+        if work_load_list is None:
+            work_load_list = [1] * len(ctx)
+        assert isinstance(work_load_list, list) and len(work_load_list) == len(ctx), \
+            "Invalid settings for work load. "
+        slices = _split_input_slice(self.batch_size, work_load_list)
+
         cur_from = self.cur
         cur_to = cur_from + self.batch_size
         if cur_to <= self.size:
@@ -99,8 +109,19 @@ class ROIIter(mx.io.DataIter):
         else:
             pad = cur_to - self.size
             roidb = self.roidb[cur_from:] + self.roidb[:pad]
-        batch = minibatch.get_minibatch(roidb, self.num_classes, self.ctx, self.work_load_list)
-        return batch
+
+        batch_list = []
+        for islice in slices:
+            num_im = islice.stop - islice.start
+            iroidb = [roidb[i] for i in range(islice.start, islice.stop)]
+            batch = minibatch.get_minibatch(iroidb, self.num_classes, self.ctx)
+            batch_list.append(batch)
+
+        all_batch = dict()
+        for key in batch_list[0].keys():
+            all_batch[key] = tensor_vstack([batch[key] for batch in batch_list])
+
+        return all_batch
 
     def _get_test_batch(self):
         """
