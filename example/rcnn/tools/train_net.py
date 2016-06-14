@@ -52,7 +52,7 @@ def train_net(image_set, year, root_path, devkit_path, pretrained, epoch,
 
     # train
     solver = Solver(prefix, sym, ctx, begin_epoch, end_epoch, kv_store, args, auxs, momentum=0.9, wd=0.0005,
-                    learning_rate=0.001, lr_scheduler=mx.lr_scheduler.FactorScheduler(30000, 0.1), max_data_shape=[3, 1000, 1000])
+                    learning_rate=0.001, lr_scheduler=mx.lr_scheduler.FactorScheduler(30000, 0.1), max_data_shape=[('data', (1, 3, 1000, 1000))])
     solver.fit(train_data, frequent=frequent)
 
     # edit params and save

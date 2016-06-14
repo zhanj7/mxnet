@@ -201,14 +201,16 @@ class DataParallelExecutorGroup(object):
         The dataset for training. It could be any object with `provide_data` and
         `provide_label` properties. Loading of actual data is not necessarily needed
         at this stage.
-    max_data_shape: list of float or int
-        Maximum shape of input data
+    max_data_shape: list of tuple (name, shape)
+        Maximum shape of input data. The order is the same as `train_data.provide_data` 
+    max_label_shape: list of tuple (name, shape)
+        Maximum shape of input label. The order is the same as `train_data.provide_label`
     shared_grop: DataParallelExecutorGroup
         An existing executor group, if to share parameters with it.
     """
     def __init__(self, sym, arg_names, param_names,
                  ctx, slices, train_data,
-                 max_data_shape=None, shared_group=None):
+                 max_data_shape=None, max_label_shape=None, shared_group=None):
         # make sure the architecture is valid
         _check_arguments(sym)
 
@@ -230,14 +232,23 @@ class DataParallelExecutorGroup(object):
             for k, v in train_data.provide_data:
                 if k == 'data':
                     batch_size = v[0]
+            if max_data_shape is None:
+                max_data_shape = []
+            if max_label_shape is None:
+                max_label_shape = []
+            max_data_shape_dict = {k: v for k, v in max_data_shape + max_label_shape}
             for k, v in train_data.provide_data + train_data.provide_label:
-                if k == 'data':
-                    if shared_group is None and max_data_shape is not None:
-                        # init first executor group
+                # initialize first executor group with maximum shape provided
+                if shared_group is None:
+                    if k in max_data_shape_dict:
                         # data size is set to max possible size of input data
-                        data_shapes[k] = tuple([slices[i].stop - slices[i].start] + max_data_shape)
+                        data_shapes[k] = tuple([slices[i].stop - slices[i].start] + \
+                                               list(max_data_shape_dict[k][1:]))
                     else:
-                        data_shapes[k] = tuple([slices[i].stop - slices[i].start] + list(v[1:]))
+                        # support inputs with different batch size from data
+                        # by indexing first dimension of input by portions in batch instead of batch_size
+                        data_shapes[k] = tuple([int((slices[i].stop - slices[i].start) * v[0] \
+                                            / batch_size)] + list(v[1:]))
                 else:
                     data_shapes[k] = tuple([int((slices[i].stop - slices[i].start) * v[0] \
                                            / batch_size)] + list(v[1:]))
@@ -312,13 +323,15 @@ class DataParallelExecutorManager(object):
         input shapes. Used only for bucketing.
     mutable_data_shape: bool
         Whether input data have different shapes or not.
-    max_data_shape: list of float or int
-        The maximum shape of input data
+    max_data_shape: list of tuple (name, shape)
+        Maximum shape of input data. The order is the same as `train_data.provide_data` 
+    max_label_shape: list of tuple (name, shape)
+        Maximum shape of input label. The order is the same as `train_data.provide_label`
     """
     def __init__(self, symbol, ctx, train_data,
                  arg_names, param_names, aux_names,
                  work_load_list=None, logger=None, sym_gen=None,
-                 mutable_data_shape=False, max_data_shape=None):
+                 mutable_data_shape=False, max_data_shape=None, max_label_shape=None):
         if logger is None:
             logger = logging
         # preparation
@@ -340,7 +353,7 @@ class DataParallelExecutorManager(object):
         self.mutable_data_shape = mutable_data_shape
 
         self.execgrp = DataParallelExecutorGroup(symbol, self.arg_names, self.param_names, self.ctx,
-                                                 self.slices, train_data, max_data_shape)
+                                                 self.slices, train_data, max_data_shape, max_label_shape)
         self.symbol = symbol
 
         self.sym_gen = sym_gen
