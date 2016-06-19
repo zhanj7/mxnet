@@ -80,7 +80,12 @@ def _load_general(data, targets):
             d_src.copyto(d_targets)
         else:
             for slice_idx, d_dst in d_targets:
-                d_src[slice_idx].copyto(d_dst)
+                if d_src[slice_idx].shape != d_dst.shape:
+                    n = d_dst.shape[0] / (slice_idx.stop - slice_idx.start)
+                    new_slice = slice(slice_idx.start * n, slice_idx.stop * n)
+                    d_src[new_slice].copyto(d_dst)
+                else:
+                    d_src[slice_idx].copyto(d_dst)
 
 def _load_data(batch, targets):
     """Load data into sliced arrays"""
@@ -196,6 +201,10 @@ class DataParallelExecutorGroup(object):
         The dataset for training. It could be any object with `provide_data` and
         `provide_label` properties. Loading of actual data is not necessarily needed
         at this stage.
+    max_data_shape: list of tuple (name, shape)
+        Maximum shape of input data. The order is the same as `train_data.provide_data` 
+    max_label_shape: list of tuple (name, shape)
+        Maximum shape of input label. The order is the same as `train_data.provide_label`
     shared_grop: DataParallelExecutorGroup
         An existing executor group, if to share parameters with it.
     """
@@ -216,13 +225,31 @@ class DataParallelExecutorGroup(object):
 
         self.train_execs = []
         for i in range(len(ctx)):
-            data_shapes = {k: tuple([slices[i].stop-slices[i].start] + list(v[1:]))
-                           for k, v in train_data.provide_data + train_data.provide_label}
-            shared_exec = None if shared_group is None else shared_group.train_execs[i]
-            train_exec = _bind_exec(sym, ctx[i], data_shapes, self.param_names,
-                                    need_grad=True, base_exec=shared_exec,
-                                    shared_data_arrays=self.shared_data_arrays[i])
-            self.train_execs.append(train_exec)
+            data_shapes = {}
+            batch_size = 0
+            for k, v in train_data.provide_data:
+                if k == 'data':
+                    batch_size = v[0]
+            if max_data_shape is None:
+                max_data_shape = []
+            if max_label_shape is None:
+                max_label_shape = []
+            max_data_shape_dict = {k: v for k, v in max_data_shape + max_label_shape}
+            for k, v in train_data.provide_data + train_data.provide_label:
+                # initialize first executor group with maximum shape provided
+                if shared_group is None:
+                    if k in max_data_shape_dict:
+                        # data size is set to max possible size of input data
+                        data_shapes[k] = tuple([slices[i].stop - slices[i].start] + \
+                                               list(max_data_shape_dict[k][1:]))
+                    else:
+                        # support inputs with different batch size from data
+                        # by indexing first dimension of input by portions in batch instead of batch_size
+                        data_shapes[k] = tuple([int((slices[i].stop - slices[i].start) * v[0] \
+                                            / batch_size)] + list(v[1:]))
+                else:
+                    data_shapes[k] = tuple([int((slices[i].stop - slices[i].start) * v[0] \
+                                           / batch_size)] + list(v[1:]))
 
         # data structure
         self.data_arrays = [[(slices[i], e.arg_dict[name]) for i, e in enumerate(self.train_execs)]
@@ -258,7 +285,9 @@ class DataParallelExecutorGroup(object):
     def update_metric(self, metric, labels):
         """ Update evaluation metric with label and current outputs """
         for texec, islice in zip(self.train_execs, self.slices):
-            labels_slice = [label[islice] for label in labels]
+            n = int(texec.outputs[0].shape[0] / (islice.stop - islice.start))
+            new_slice = slice(islice.start * n, islice.stop * n)
+            labels_slice = [label[new_slice] for label in labels]
             metric.update(labels_slice, texec.outputs)
 
 class DataParallelExecutorManager(object):
@@ -284,6 +313,12 @@ class DataParallelExecutorManager(object):
         When not specified, default logger will be used.
     sym_gen : a function that generate new Symbols depending on different
         input shapes. Used only for bucketing.
+    mutable_data_shape: bool
+        Whether input data have different shapes or not.
+    max_data_shape: list of tuple (name, shape)
+        Maximum shape of input data. The order is the same as `train_data.provide_data` 
+    max_label_shape: list of tuple (name, shape)
+        Maximum shape of input label. The order is the same as `train_data.provide_label`
     """
     def __init__(self, symbol, ctx, train_data,
                  arg_names, param_names, aux_names,
@@ -306,9 +341,10 @@ class DataParallelExecutorManager(object):
         self.param_names = param_names
         self.aux_names = aux_names
         self.ctx = ctx
+        self.mutable_data_shape = mutable_data_shape
 
         self.execgrp = DataParallelExecutorGroup(symbol, self.arg_names, self.param_names, self.ctx,
-                                                 self.slices, train_data)
+                                                 self.slices, train_data, max_data_shape, max_label_shape)
         self.symbol = symbol
 
         self.sym_gen = sym_gen
@@ -388,6 +424,13 @@ class DataParallelExecutorManager(object):
                 self.execgrp_bucket[key] = execgrp
 
             self.curr_execgrp = self.execgrp_bucket[key]
+        elif self.mutable_data_shape is True:
+            # for each data batch, generate new execgrp and share params with the initial one
+            execgrp = DataParallelExecutorGroup(self.symbol, self.arg_names,
+                                                self.param_names, self.ctx,
+                                                self.slices, data_batch,
+                                                shared_group=self.execgrp)
+            self.curr_execgrp = execgrp
         else:
             self.curr_execgrp = self.execgrp
 
