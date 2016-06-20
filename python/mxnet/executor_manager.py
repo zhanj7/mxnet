@@ -208,7 +208,9 @@ class DataParallelExecutorGroup(object):
     shared_grop: DataParallelExecutorGroup
         An existing executor group, if to share parameters with it.
     """
-    def __init__(self, sym, arg_names, param_names, ctx, slices, train_data, shared_group=None):
+    def __init__(self, sym, arg_names, param_names,
+                 ctx, slices, train_data,
+                 max_data_shape=None, max_label_shape=None, shared_group=None):
         # make sure the architecture is valid
         _check_arguments(sym)
 
@@ -250,6 +252,12 @@ class DataParallelExecutorGroup(object):
                 else:
                     data_shapes[k] = tuple([int((slices[i].stop - slices[i].start) * v[0] \
                                            / batch_size)] + list(v[1:]))
+
+            shared_exec = None if shared_group is None else shared_group.train_execs[i]
+            train_exec = _bind_exec(sym, ctx[i], data_shapes, self.param_names,
+                                    need_grad=True, base_exec=shared_exec,
+                                    shared_data_arrays=self.shared_data_arrays[i])
+            self.train_execs.append(train_exec)
 
         # data structure
         self.data_arrays = [[(slices[i], e.arg_dict[name]) for i, e in enumerate(self.train_execs)]
@@ -322,7 +330,8 @@ class DataParallelExecutorManager(object):
     """
     def __init__(self, symbol, ctx, train_data,
                  arg_names, param_names, aux_names,
-                 work_load_list=None, logger=None, sym_gen=None):
+                 work_load_list=None, logger=None, sym_gen=None,
+                 mutable_data_shape=False, max_data_shape=None, max_label_shape=None):
         if logger is None:
             logger = logging
         # preparation
@@ -433,7 +442,6 @@ class DataParallelExecutorManager(object):
             self.curr_execgrp = execgrp
         else:
             self.curr_execgrp = self.execgrp
-
         self.curr_execgrp.load_data_batch(data_batch)
 
     def forward(self, is_train=False):

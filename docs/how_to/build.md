@@ -37,7 +37,7 @@ Optional libraries
 
 - `CUDA Toolkit >= v7.0` to run on nvidia GPUs
   - Requires GPU with support for `Compute Capability >= 2.0`
-- CUDNN to accelerate the GPU computation (only CUDNN 3 is supported)
+- CUDNN to accelerate the GPU computation
 - opencv for image augmentation
 
 We can edit `make/config.mk` to change the compile options, and then build by
@@ -109,7 +109,7 @@ Secondly, fetch the third-party libraries, including [OpenCV](http://sourceforge
 
  - NOTICE: You need to register as a NVIDIA community user to get the download link of CuDNN.
 
-Finally, use CMake to create a Visual Studio solution in `./build/`. During configuration, you may need to set the path of each third-party library, until no error is reported. Open the solution and compile, you will get a `mxnet.dll` in `./build/Release` or `./build/Debug`.
+Finally, use CMake to create a Visual Studio solution in `./build/`. During configuration, you may need to set the path of each third-party library, until no error is reported. (Set environmental variable OpenBLAS_HOME to the OpenBLAS directory containing `include` and `lib`; set OpenCV_DIR to the `build` directory after unpacking the OpenCV package.) Open the solution and compile, you will get a `mxnet.dll` in `./build/Release` or `./build/Debug`.
 
 ### Installing pre-built packages on Windows
 
@@ -293,15 +293,18 @@ make scalainstall
 
 ## Docker Images
 
-Builds of MXNet are available as [Docker](https://www.docker.com/whatisdocker) images:
-[MXNet Docker (CPU)](https://hub.docker.com/r/kaixhin/mxnet/) or [MXNet Docker (CUDA)](https://hub.docker.com/r/kaixhin/cuda-mxnet/).
-These are updated on a weekly basis with the latest builds of MXNet. Examples of running bash in a Docker container
-are as follows:
+Builds of MXNet are available as [Docker](https://www.docker.com) images:
+[MXNet Docker (CPU)](https://hub.docker.com/r/kaixhin/mxnet/) or
+[MXNet Docker (CUDA)](https://hub.docker.com/r/kaixhin/cuda-mxnet/).
+These are updated on a weekly basis with the latest builds of MXNet.
+Examples of running bash in a Docker container are as follows:
 
 ```bash
 sudo docker run -it kaixhin/mxnet
-sudo docker run -it --device /dev/nvidiactl --device /dev/nvidia-uvm --device /dev/nvidia0 kaixhin/cuda-mxnet:7.0
+sudo nvidia-docker run -it kaixhin/cuda-mxnet:7.0
 ```
 
-For a guide to Docker, see the [official docs](https://docs.docker.com/userguide/). For more details on how to use the
-MXNet Docker images, including requirements for CUDA support, consult the [source project](https://github.com/Kaixhin/dockerfiles).
+For a guide to Docker, see the [official docs](https://docs.docker.com).
+CUDA support requires [NVIDIA Docker](https://github.com/NVIDIA/nvidia-docker).
+For more details on how to use the MXNet Docker images,
+consult the [source project](https://github.com/Kaixhin/dockerfiles).

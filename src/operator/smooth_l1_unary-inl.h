@@ -71,22 +71,12 @@ void SmoothL1Forward_(const TBlob& src,
   CHECK_EQ(ret->type_flag_, src.type_flag_)
     << "Unary function only support input/output with the same type";
   real_t sigma2 = env.scalar * env.scalar;
-  const int ndim = ret[0].shape_.ndim();
-  if (ndim == 4) {
-    MSHADOW_TYPE_SWITCH(ret->type_flag_, DType, {
-      mshadow::Tensor<xpu, 4, DType> out = ret->get<xpu, 4, DType>(s);
-      mshadow::Tensor<xpu, 4, DType> in = src.get<xpu, 4, DType>(s);
-      ASSIGN_DISPATCH(out, req,
-                      F<mshadow_op::smooth_l1_loss>(in, ScalarExp<DType>(sigma2)));
-    });
-  } else if (ndim == 2) {
-    MSHADOW_TYPE_SWITCH(ret->type_flag_, DType, {
-      mshadow::Tensor<xpu, 2, DType> out = ret->get<xpu, 2, DType>(s);
-      mshadow::Tensor<xpu, 2, DType> in = src.get<xpu, 2, DType>(s);
-      ASSIGN_DISPATCH(out, req,
-                      F<mshadow_op::smooth_l1_loss>(in, ScalarExp<DType>(sigma2)));
-    });
-  }
+  MSHADOW_TYPE_SWITCH(ret->type_flag_, DType, {
+    mshadow::Tensor<xpu, 2, DType> out = ret->FlatTo2D<xpu, DType>(s);
+    mshadow::Tensor<xpu, 2, DType> in = src.FlatTo2D<xpu, DType>(s);
+    ASSIGN_DISPATCH(out, req,
+                    F<mshadow_op::smooth_l1_loss>(in, ScalarExp<DType>(sigma2)));
+  });
 }
 
 template<typename xpu>
@@ -104,28 +94,17 @@ void SmoothL1BackwardUseIn_(const OutputGrad& out_grad,
   CHECK_EQ(in_grad->type_flag_, in_data0.data.type_flag_)
     << "Unary function only support input/output with the same type";
   real_t sigma2 = env.scalar * env.scalar;
-  const int ndim = in_grad[0].shape_.ndim();
-  if (ndim == 4) {
-    MSHADOW_TYPE_SWITCH(in_grad->type_flag_, DType, {
-      mshadow::Tensor<xpu, 4, DType> src = in_data0.data.get<xpu, 4, DType>(s);
-      mshadow::Tensor<xpu, 4, DType> ograd = out_grad.data.get<xpu, 4, DType>(s);
-      mshadow::Tensor<xpu, 4, DType> igrad = in_grad->get<xpu, 4, DType>(s);
-      ASSIGN_DISPATCH(igrad, req,
-                      ograd * F<mshadow_op::smooth_l1_gradient>(src, ScalarExp<DType>(sigma2)));
-    });
-  } else if (ndim == 2) {
-    MSHADOW_TYPE_SWITCH(in_grad->type_flag_, DType, {
-      mshadow::Tensor<xpu, 2, DType> src = in_data0.data.get<xpu, 2, DType>(s);
-      mshadow::Tensor<xpu, 2, DType> ograd = out_grad.data.get<xpu, 2, DType>(s);
-      mshadow::Tensor<xpu, 2, DType> igrad = in_grad->get<xpu, 2, DType>(s);
-      ASSIGN_DISPATCH(igrad, req,
-                      ograd * F<mshadow_op::smooth_l1_gradient>(src, ScalarExp<DType>(sigma2)));
-    });
-  }
+  MSHADOW_TYPE_SWITCH(in_grad->type_flag_, DType, {
+    mshadow::Tensor<xpu, 2, DType> src = in_data0.data.FlatTo2D<xpu, DType>(s);
+    mshadow::Tensor<xpu, 2, DType> ograd = out_grad.data.FlatTo2D<xpu, DType>(s);
+    mshadow::Tensor<xpu, 2, DType> igrad = in_grad->FlatTo2D<xpu, DType>(s);
+    ASSIGN_DISPATCH(igrad, req,
+                    ograd * F<mshadow_op::smooth_l1_gradient>(src, ScalarExp<DType>(sigma2)));
+  });
 }
 
 MXNET_REGISTER_SIMPLE_OP(smooth_l1, XPU)
-.set_function(XPU::kDevMask, SmoothL1Forward_<XPU>, kInplaceInOut)
+.set_function(XPU::kDevMask, SmoothL1Forward_<XPU>, kNoInplace)
 .set_gradient(XPU::kDevMask, SmoothL1BackwardUseIn_<XPU>, kInplaceOutIn)
 .set_enable_scalar(true)
 .describe("Calculate Smooth L1 Loss(lhs, scalar)");
