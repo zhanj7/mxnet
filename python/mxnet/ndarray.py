@@ -1,7 +1,8 @@
 # coding: utf-8
-# pylint: disable= too-many-lines, redefined-builtin
+# pylint: disable= too-many-lines, redefined-builtin, protected-access
 """NDArray API of mxnet."""
 from __future__ import absolute_import
+from __future__ import division
 
 import ctypes
 import warnings
@@ -15,7 +16,9 @@ from .base import mx_uint, mx_float, NDArrayHandle, FunctionHandle
 from .base import ctypes2buffer
 from .base import check_call, ctypes2docstring
 from .context import Context
+from . import _ndarray_internal as _internal
 
+# pylint: disable= no-member
 _DTYPE_NP_TO_MX = {
     np.float32 : 0,
     np.float64 : 1,
@@ -31,6 +34,7 @@ _DTYPE_MX_TO_NP = {
     3 : np.uint8,
     4 : np.int32
 }
+# pylint: enable= no-member
 
 def _new_empty_handle():
     """Return a new empty handle.
@@ -100,9 +104,9 @@ class NDArray(object):
         if not self.writable:
             raise ValueError('trying to add to a readonly NDArray')
         if isinstance(other, NDArray):
-            return NDArray._plus(self, other, out=self)
+            return _internal._plus(self, other, out=self)
         elif isinstance(other, numeric_types):
-            return NDArray._plus_scalar(self, float(other), out=self)
+            return _internal._plus_scalar(self, float(other), out=self)
         else:
             raise TypeError('type %s not supported' % str(type(other)))
 
@@ -116,9 +120,9 @@ class NDArray(object):
         if not self.writable:
             raise ValueError('trying to subtract from a readonly NDArray')
         if isinstance(other, NDArray):
-            return NDArray._minus(self, other, out=self)
+            return _internal._minus(self, other, out=self)
         elif isinstance(other, numeric_types):
-            return NDArray._minus_scalar(self, float(other), out=self)
+            return _internal._minus_scalar(self, float(other), out=self)
         else:
             raise TypeError('type %s not supported' % str(type(other)))
 
@@ -129,15 +133,15 @@ class NDArray(object):
         return multiply(self, other)
 
     def __neg__(self):
-        return NDArray._mul_scalar(self, -1.0)
+        return _internal._mul_scalar(self, -1.0)
 
     def __imul__(self, other):
         if not self.writable:
             raise ValueError('trying to multiply to a readonly NDArray')
         if isinstance(other, NDArray):
-            return NDArray._mul(self, other, out=self)
+            return _internal._mul(self, other, out=self)
         elif isinstance(other, numeric_types):
-            return NDArray._mul_scalar(self, float(other), out=self)
+            return _internal._mul_scalar(self, float(other), out=self)
         else:
             raise TypeError('type %s not supported' % str(type(other)))
 
@@ -154,14 +158,26 @@ class NDArray(object):
         if not self.writable:
             raise ValueError('trying to divide from a readonly NDArray')
         if isinstance(other, NDArray):
-            return NDArray._div(self, other, out=self)
+            return _internal._div(self, other, out=self)
         elif isinstance(other, numeric_types):
-            return NDArray._div_scalar(self, float(other), out=self)
+            return _internal._div_scalar(self, float(other), out=self)
         else:
             raise TypeError('type %s not supported' % str(type(other)))
 
     def __truediv__(self, other):
-        return self.__div__(other)
+        return divide(self, other)
+
+    def __rtruediv__(self, other):
+        return divide(other, self)
+
+    def __itruediv__(self, other):
+        return self.__idiv__(other)
+
+    def __pow__(self, other):
+        return power(self, other)
+
+    def __rpow__(self, other):
+        return power(other, self)
 
     def __getstate__(self):
         this = self.__dict__.copy()
@@ -204,7 +220,7 @@ class NDArray(object):
             if value.handle is not self.handle:
                 value.copyto(self)
         elif isinstance(value, numeric_types):
-            NDArray._set_value(float(value), out=self)
+            _internal._set_value(float(value), out=self)
         elif isinstance(value, (np.ndarray, np.generic)):
             self._sync_copyfrom(value)
         else:
@@ -300,20 +316,19 @@ class NDArray(object):
             the broadcast shape
         """
         cur_shape = self.shape
-        err_str = 'operands could not be broadcast together with remapped shapes'\
-                '[original->remapped]: {} and requested shape {}'.format(cur_shape, shape)
+        err_str = 'operands could not be broadcast together with remapped shapes' \
+                  '[original->remapped]: {} and requested shape {}'.format(cur_shape, shape)
         if len(shape) < len(cur_shape):
             raise ValueError(err_str)
         cur_shape = (1,) * (len(shape) - len(cur_shape)) + cur_shape
-        cur_shape = np.array(cur_shape)
-        shape = np.array(shape)
-        broadcasting_axes = np.nonzero(cur_shape != shape)
-        if (cur_shape[broadcasting_axes] != 1).any():
+        cur_shape_arr = np.array(cur_shape)
+        broadcasting_axes = np.nonzero(cur_shape_arr != np.array(shape))
+        if (cur_shape_arr[broadcasting_axes] != 1).any():
             raise ValueError(err_str)
-        ret = self.reshape(tuple(cur_shape))
-        for axis in broadcasting_axes[0]:
-            ret = broadcast_axis(ret, axis=axis, size=shape[axis])
-        return ret
+        if cur_shape != self.shape:
+            return broadcast_to(self.reshape(cur_shape), shape=shape)
+        else:
+            return broadcast_to(self, shape=tuple(shape))
     # pylint: enable= undefined-variable
 
     def wait_to_read(self):
@@ -454,10 +469,10 @@ class NDArray(object):
                 warnings.warn('copy an array to itself, is it intended?',
                               RuntimeWarning)
                 return
-            return NDArray._copyto(self, out=other)
+            return _internal._copyto(self, out=other)
         elif isinstance(other, Context):
             hret = NDArray(_new_alloc_handle(self.shape, other, True, self.dtype))
-            return NDArray._copyto(self, out=hret)
+            return _internal._copyto(self, out=hret)
         else:
             raise TypeError('copyto do not support type ' + str(type(other)))
 
@@ -509,7 +524,7 @@ def onehot_encode(indices, out):
         Same as out.
     """
     # pylint: disable= no-member, protected-access
-    return NDArray._onehot_encode(indices, out, out=out)
+    return _internal._onehot_encode(indices, out, out=out)
     # pylint: enable= no-member, protected-access
 
 
@@ -535,6 +550,61 @@ def empty(shape, ctx=None, dtype=mx_real_t):
         ctx = Context.default_ctx
     return NDArray(handle=_new_alloc_handle(shape, ctx, False, dtype))
 
+#pylint: disable= too-many-arguments, no-member, protected-access
+def _ufunc_helper(lhs, rhs, fn_array, fn_scalar, lfn_scalar, rfn_scalar=None):
+    """ Helper function for element-wise operation
+    The function will perform numpy-like broadcasting if needed and call different functions
+
+    Parameters
+    ----------
+    lhs : NDArray or numeric value
+        left hande side operand
+
+    rhs : NDArray or numeric value
+        right hand side operand
+
+    fn_array : function
+        function to be called if both lhs and rhs are of NDArray type
+
+    fn_scalar : function
+        function to be called if both lhs and rhs are numeric values
+
+    lfn_scalar : function
+        function to be called if lhs is NDArray while rhs is numeric value
+
+    rfn_scalar : function
+        function to be called if lhs is numeric value while rhs is NDArray;
+        if none is provided, then the function is commutative, so rfn_scalar is equal to lfn_scalar
+
+    Returns
+    -------
+    out: NDArray
+        result array
+    """
+    if isinstance(lhs, numeric_types):
+        if isinstance(rhs, numeric_types):
+            return fn_scalar(lhs, rhs)
+        else:
+            if rfn_scalar is None:
+                # commutative function
+                return lfn_scalar(rhs, float(lhs))
+            else:
+                return rfn_scalar(rhs, float(lhs))
+    elif isinstance(rhs, numeric_types):
+        return lfn_scalar(lhs, float(rhs))
+    elif isinstance(rhs, NDArray):
+        # check whether broadcasting is needed
+        lsize = functools.reduce(operator.mul, lhs.shape)
+        rsize = functools.reduce(operator.mul, rhs.shape)
+        if lsize < rsize:
+            lhs = lhs.broadcast_to(rhs.shape)
+        elif lsize > rsize:
+            rhs = rhs.broadcast_to(lhs.shape)
+        return fn_array(lhs, rhs)
+    else:
+        raise TypeError('type %s not supported' % str(type(rhs)))
+#pylint: enable= too-many-arguments, no-member, protected-access
+
 def add(lhs, rhs):
     """ Perform element-wise addition
 
@@ -552,23 +622,13 @@ def add(lhs, rhs):
         result array
     """
     # pylint: disable= no-member, protected-access
-    if isinstance(lhs, numeric_types):
-        if isinstance(rhs, numeric_types):
-            return lhs + rhs
-        else:
-            return add(rhs, lhs)
-    elif isinstance(rhs, numeric_types):
-        return NDArray._plus_scalar(lhs, float(rhs))
-    elif isinstance(rhs, NDArray):
-        lsize = functools.reduce(operator.mul, lhs.shape)
-        rsize = functools.reduce(operator.mul, rhs.shape)
-        if lsize < rsize:
-            lhs = lhs.broadcast_to(rhs.shape)
-        elif lsize > rsize:
-            rhs = rhs.broadcast_to(lhs.shape)
-        return NDArray._plus(lhs, rhs)
-    else:
-        raise TypeError('type %s not supported' % str(type(rhs)))
+    return _ufunc_helper(
+        lhs,
+        rhs,
+        _internal._plus,
+        operator.add,
+        _internal._plus_scalar,
+        None)
     # pylint: enable= no-member, protected-access
 
 def subtract(lhs, rhs):
@@ -588,25 +648,13 @@ def subtract(lhs, rhs):
         result array
     """
     # pylint: disable= no-member, protected-access
-    if isinstance(lhs, numeric_types):
-        if isinstance(rhs, numeric_types):
-            return lhs - rhs
-        elif isinstance(rhs, NDArray):
-            return NDArray._rminus_scalar(rhs, float(lhs))
-        else:
-            raise TypeError('type %s not supported' % str(type(rhs)))
-    elif isinstance(rhs, numeric_types):
-        return NDArray._minus_scalar(lhs, float(rhs))
-    elif isinstance(rhs, NDArray):
-        lsize = functools.reduce(operator.mul, lhs.shape)
-        rsize = functools.reduce(operator.mul, rhs.shape)
-        if lsize < rsize:
-            lhs = lhs.broadcast_to(rhs.shape)
-        elif lsize > rsize:
-            rhs = rhs.broadcast_to(lhs.shape)
-        return NDArray._minus(lhs, rhs)
-    else:
-        raise TypeError('type %s not supported' % str(type(rhs)))
+    return _ufunc_helper(
+        lhs,
+        rhs,
+        _internal._minus,
+        operator.sub,
+        _internal._minus_scalar,
+        _internal._rminus_scalar)
     # pylint: enable= no-member, protected-access
 
 def multiply(lhs, rhs):
@@ -626,23 +674,13 @@ def multiply(lhs, rhs):
         result array
     """
     # pylint: disable= no-member, protected-access
-    if isinstance(lhs, numeric_types):
-        if isinstance(rhs, numeric_types):
-            return lhs * rhs
-        else:
-            return multiply(rhs, lhs)
-    elif isinstance(rhs, numeric_types):
-        return NDArray._mul_scalar(lhs, float(rhs))
-    elif isinstance(rhs, NDArray):
-        lsize = functools.reduce(operator.mul, lhs.shape)
-        rsize = functools.reduce(operator.mul, rhs.shape)
-        if lsize < rsize:
-            lhs = lhs.broadcast_to(rhs.shape)
-        elif lsize > rsize:
-            rhs = rhs.broadcast_to(lhs.shape)
-        return NDArray._mul(lhs, rhs)
-    else:
-        raise TypeError('type %s not supported' % str(type(rhs)))
+    return _ufunc_helper(
+        lhs,
+        rhs,
+        _internal._mul,
+        operator.mul,
+        _internal._mul_scalar,
+        None)
     # pylint: enable= no-member, protected-access
 
 def divide(lhs, rhs):
@@ -662,25 +700,91 @@ def divide(lhs, rhs):
         result array
     """
     # pylint: disable= no-member, protected-access
-    if isinstance(lhs, numeric_types):
-        if isinstance(rhs, numeric_types):
-            return lhs / rhs
-        elif isinstance(rhs, NDArray):
-            return NDArray._rdiv_scalar(rhs, float(lhs))
-        else:
-            raise TypeError('type %s not supported' % str(type(rhs)))
-    elif isinstance(rhs, numeric_types):
-        return NDArray._div_scalar(lhs, float(rhs))
-    elif isinstance(rhs, NDArray):
-        lsize = functools.reduce(operator.mul, lhs.shape)
-        rsize = functools.reduce(operator.mul, rhs.shape)
-        if lsize < rsize:
-            lhs = lhs.broadcast_to(rhs.shape)
-        elif lsize > rsize:
-            rhs = rhs.broadcast_to(lhs.shape)
-        return NDArray._div(lhs, rhs)
-    else:
-        raise TypeError('type %s not supported' % str(type(rhs)))
+    return _ufunc_helper(
+        lhs,
+        rhs,
+        _internal._div,
+        operator.truediv,
+        _internal._div_scalar,
+        _internal._rdiv_scalar)
+    # pylint: enable= no-member, protected-access
+
+def power(lhs, rhs):
+    """ Perform power operator
+
+    Parameters
+    ----------
+    lhs : Array or float value
+        left hand side operand
+
+    rhs : Array of float value
+        right hand side operand
+
+    Returns
+    -------
+    out: Array
+        result array
+    """
+    # pylint: disable= no-member, protected-access
+    return _ufunc_helper(
+        lhs,
+        rhs,
+        _internal._power,
+        operator.pow,
+        _internal._power_scalar,
+        _internal._rpower_scalar)
+    # pylint: enable= no-member, protected-access
+
+def maximum(lhs, rhs):
+    """ Perform maximum operator
+
+    Parameters
+    ----------
+    lhs : Array or float value
+        left hand side operand
+
+    rhs : Array of float value
+        right hand side operand
+
+    Returns
+    -------
+    out: Array
+        result array
+    """
+    # pylint: disable= no-member, protected-access
+    return _ufunc_helper(
+        lhs,
+        rhs,
+        _internal._maximum,
+        lambda x, y: x if x > y else y,
+        _internal._maximum_scalar,
+        None)
+    # pylint: enable= no-member, protected-access
+
+def minimum(lhs, rhs):
+    """ Perform minimum operator
+
+    Parameters
+    ----------
+    lhs : Array or float value
+        left hand side operand
+
+    rhs : Array of float value
+        right hand side operand
+
+    Returns
+    -------
+    out: Array
+        result array
+    """
+    # pylint: disable= no-member, protected-access
+    return _ufunc_helper(
+        lhs,
+        rhs,
+        _internal._minimum,
+        lambda x, y: x if x < y else y,
+        _internal._minimum_scalar,
+        None)
     # pylint: enable= no-member, protected-access
 
 def true_divide(lhs, rhs):
@@ -730,125 +834,6 @@ def ones(shape, ctx=None, dtype=mx_real_t):
     arr = empty(shape, ctx, dtype)
     arr[:] = 1.0
     return arr
-
-# pylint: disable=too-many-locals, invalid-name, no-member, protected-access, undefined-variable
-# pylint: disable=too-many-branches
-def _reduce(arr, axis=None, keepdims=False, typ='sum'):
-    """ Reduce the array along given axises. The semantic strictly follows numpy's document.
-
-    Parameters
-    ----------
-    arr : Array
-        the array to be reduced
-    axis : int or list(int), optional
-        along which axis to do reduction
-    keepdims : bool
-        whether the reduced axis should be kept in the final shape
-
-    Returns
-    -------
-    out: Array
-        The reduced NDArray.
-    """
-    if 'sum' == typ:
-        reduce_func = sum_axis
-    elif 'max' == typ:
-        reduce_func = max_axis
-    elif 'min' == typ:
-        reduce_func = min_axis
-    else:
-        raise TypeError('typ=\'%s\' is not supported.' % typ)
-    ndim = len(arr.shape)
-    if axis is None:
-        axis = list(range(ndim))
-    elif isinstance(axis, int):
-        axis = [axis]
-    elif isinstance(axis, tuple) or isinstance(axis, list):
-        axis = list(axis)
-    else:
-        raise TypeError('\'%s\' object is not supported as axis.' % type(axis).__name__)
-
-    if list(range(ndim)) == axis:
-        ret = reduce_func(arr, axis=-1, keepdims=keepdims)
-        if not keepdims:
-            return ret.asnumpy()[0]
-        else:
-            return ret
-    for i in axis:
-        if not isinstance(i, int):
-            raise TypeError('\'%s\' object cannot be interpreted as an integer' % type(i).__name__)
-    axis = sorted([x if 0 <= x else x + ndim for x in axis])
-    for i in axis:
-        if i < 0 or ndim <= i:
-            raise ValueError('\'axis\' entry is out of bounds')
-    if len(set(axis)) != len(axis):
-        raise ValueError('duplicate value in \'axis\'')
-    assert(len(axis) != 0)
-    ret = arr
-    for i in reversed(axis):
-        ret = reduce_func(ret, axis=i, keepdims=keepdims)
-    return ret
-# pylint: enable=too-many-locals, invalid-name, no-member, protected-access, undefined-variable
-# pylint: enable=too-many-branches
-
-def sum(arr, axis=None, keepdims=False):
-    """ Sum the array along given axises. The semantic strictly follows numpy's document.
-
-    Parameters
-    ----------
-    arr : Array
-        the array to be reduced
-    axis : int or list(int), optional
-        along which axis to do reduction
-    keepdims : bool
-        whether the reduced axis should be kept in the final shape
-
-    Returns
-    -------
-    out: Array
-        The reduced NDArray.
-    """
-    return _reduce(arr=arr, axis=axis, keepdims=keepdims, typ='sum')
-
-def max(arr, axis=None, keepdims=False):
-    """ Take the maximum of the array along given axises.
-    The semantic strictly follows numpy's document.
-
-    Parameters
-    ----------
-    arr : Array
-        the array to be reduced
-    axis : int or list(int), optional
-        along which axis to do reduction
-    keepdims : bool
-        whether the reduced axis should be kept in the final shape
-
-    Returns
-    -------
-    out: Array
-        The reduced NDArray.
-    """
-    return _reduce(arr=arr, axis=axis, keepdims=keepdims, typ='max')
-
-def min(arr, axis=None, keepdims=False):
-    """ Take the minimum of the array along given axises.
-    The semantic strictly follows numpy's document.
-
-    Parameters
-    ----------
-    arr : Array
-        the array to be reduced
-    axis : int or list(int), optional
-        along which axis to do reduction
-    keepdims : bool
-        whether the reduced axis should be kept in the final shape
-
-    Returns
-    -------
-    out: Array
-        The reduced NDArray.
-    """
-    return _reduce(arr=arr, axis=axis, keepdims=keepdims, typ='min')
 
 def full(shape, val, ctx=None):
     """Create a new NDArray filled with given value, with specified shape.
@@ -1042,24 +1027,24 @@ def imdecode(str_img, clip_rect=(0, 0, 0, 0), out=None, index=0, channels=3, mea
     if mean is None:
         mean = NDArray(_new_empty_handle())
     if out is None:
-        return NDArray._imdecode(mean, index,
-                                 clip_rect[0],
-                                 clip_rect[1],
-                                 clip_rect[2],
-                                 clip_rect[3],
-                                 channels,
-                                 len(str_img),
-                                 str_img=str_img)
+        return _internal._imdecode(mean, index,
+                                   clip_rect[0],
+                                   clip_rect[1],
+                                   clip_rect[2],
+                                   clip_rect[3],
+                                   channels,
+                                   len(str_img),
+                                   str_img=str_img)
     else:
-        return NDArray._imdecode(mean, index,
-                                 clip_rect[0],
-                                 clip_rect[1],
-                                 clip_rect[2],
-                                 clip_rect[3],
-                                 channels,
-                                 len(str_img),
-                                 str_img=str_img,
-                                 out=out)
+        return _internal._imdecode(mean, index,
+                                   clip_rect[0],
+                                   clip_rect[1],
+                                   clip_rect[2],
+                                   clip_rect[3],
+                                   channels,
+                                   len(str_img),
+                                   str_img=str_img,
+                                   out=out)
 
 # pylint: disable=too-many-locals, invalid-name
 def _make_ndarray_function(handle):
@@ -1123,7 +1108,7 @@ def _make_ndarray_function(handle):
         """Internal binary function
         """
         if out:
-            if isinstance(out, NDArray) == False:
+            if not isinstance(out, NDArray):
                 raise TypeError('out must be NDArray')
             if not out.writable:
                 raise TypeError('out must be writable')
@@ -1144,7 +1129,7 @@ def _make_ndarray_function(handle):
     def unary_ndarray_function(src, out=None, *args, **kwargs):
         """internal NDArray function"""
         if out:
-            if isinstance(out, NDArray) == False:
+            if not isinstance(out, NDArray):
                 raise TypeError('out must be NDArray')
             if not out.writable:
                 raise TypeError('out must be writable')
@@ -1225,12 +1210,13 @@ def _init_ndarray_module():
                                     ctypes.byref(plist)))
 
     module_obj = sys.modules[__name__]
+    module_internal = sys.modules["mxnet._ndarray_internal"]
     for i in range(size.value):
         hdl = FunctionHandle(plist[i])
         function = _make_ndarray_function(hdl)
-        # if function name starts with underscore, register as static method of NDArray
+        # if function name starts with underscore, register as internal namespace
         if function.__name__.startswith('_'):
-            setattr(NDArray, function.__name__, staticmethod(function))
+            setattr(module_internal, function.__name__, function)
         else:
             fname = function.__name__
             fn_obj = getattr(module_obj, fname, None)

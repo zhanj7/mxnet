@@ -232,6 +232,7 @@ def _train_multi_device(symbol, ctx, arg_names, param_names, aux_names,
             do_reset = True
             for data_batch in train_data:
                 executor_manager.load_data_batch(data_batch)
+
                 if monitor is not None:
                     monitor.tic()
 
@@ -273,7 +274,7 @@ def _train_multi_device(symbol, ctx, arg_names, param_names, aux_names,
                     do_reset = False
                     break
 
-            if do_reset is True:
+            if do_reset == True:
                 logger.info('Epoch[%d] Resetting Data Iterator', epoch)
                 train_data.reset()
 
@@ -315,6 +316,7 @@ def _train_multi_device(symbol, ctx, arg_names, param_names, aux_names,
             name_value = eval_metric.get_name_value()
             for name, value in name_value:
                 logger.info('Epoch[%d] Validation-%s=%f', epoch, name, value)
+            eval_data.reset()
     # end of all epochs
     return
 

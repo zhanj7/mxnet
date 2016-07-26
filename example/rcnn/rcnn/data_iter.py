@@ -1,12 +1,10 @@
 import mxnet as mx
 import numpy as np
 import minibatch
-from mxnet.executor_manager import _split_input_slice
-from helper.processing.image_processing import tensor_vstack
 
 
 class ROIIter(mx.io.DataIter):
-    def __init__(self, roidb, ctx, batch_size=2, shuffle=False, mode='train', work_load_list=None):
+    def __init__(self, roidb, batch_size=2, shuffle=False, mode='train'):
         """
         This Iter will provide roi data to Fast R-CNN network
         :param roidb: must be preprocessed
@@ -17,11 +15,9 @@ class ROIIter(mx.io.DataIter):
         super(ROIIter, self).__init__()
 
         self.roidb = roidb
-        self.ctx = ctx
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.mode = mode
-        self.work_load_list = work_load_list
         if self.mode != 'train':
             assert self.batch_size == 1
 
@@ -34,17 +30,16 @@ class ROIIter(mx.io.DataIter):
         self.data = None
         self.label = None
         self.get_batch()
+        self.data_name = self.data.keys()
+        self.label_name = self.label.keys()
 
     @property
     def provide_data(self):
-        return [('data', self.data[0].shape), ('rois', self.data[1].shape)]
+        return [(k, v.shape) for k, v in self.data.items()]
 
     @property
     def provide_label(self):
-        return [('cls_prob_label', self.label[0].shape),
-                ('bbox_loss_target', self.label[1].shape),
-                ('bbox_loss_inside_weight', self.label[2].shape),
-                ('bbox_loss_outside_weight', self.label[3].shape)]
+        return [(k, v.shape) for k, v in self.label.items()]
 
     def reset(self):
         self.cur = 0
@@ -58,13 +53,8 @@ class ROIIter(mx.io.DataIter):
         if self.iter_next():
             self.get_batch()
             self.cur += self.batch_size
-            if self.mode == 'train':
-                return mx.io.DataBatch(data=self.data, label=self.label,
-                                       pad=self.getpad(), index=self.getindex(),
-                                       provide_data=self.provide_data, provide_label=self.provide_label)
-            else:
-                return mx.io.DataBatch(data=self.data, label=self.label,
-                                       pad=self.getpad(), index=self.getindex())
+            return mx.io.DataBatch(data=self.data, label=self.label,
+                                   pad=self.getpad(), index=self.getindex())
         else:
             raise StopIteration
 
@@ -72,17 +62,17 @@ class ROIIter(mx.io.DataIter):
         return self.cur / self.batch_size
 
     def getpad(self):
-        if self.cur + self.batch_size > self.size:
-            return self.cur + self.batch_size - self.size
-        else:
-            return 0
+        return self.batch_size - self.size % self.batch_size
 
     def get_batch(self):
         if self.mode == 'train':
             self.batch = self._get_train_batch()
-            self.data = [mx.nd.array(self.batch['data']), mx.nd.array(self.batch['rois'])]
-            self.label = [mx.nd.array(self.batch['labels']), mx.nd.array(self.batch['bbox_targets']),
-                mx.nd.array(self.batch['bbox_inside_weights']), mx.nd.array(self.batch['bbox_outside_weights'])]
+            self.data = {'data': self.batch['data'],
+                         'rois': self.batch['rois']}
+            self.label = {'cls_prob_label': self.batch['labels'],
+                          'bbox_loss_target': self.batch['bbox_targets'],
+                          'bbox_loss_inside_weight': self.batch['bbox_inside_weights'],
+                          'bbox_loss_outside_weight': self.batch['bbox_outside_weights']}
         else:
             self.batch = self._get_test_batch()
             self.data = {'data': self.batch['data'],
@@ -94,34 +84,11 @@ class ROIIter(mx.io.DataIter):
         utilize minibatch sampling, e.g. 2 images and 64 rois per image
         :return: training batch (e.g. 128 samples)
         """
-        work_load_list = self.work_load_list
-        ctx = self.ctx
-        if work_load_list is None:
-            work_load_list = [1] * len(ctx)
-        assert isinstance(work_load_list, list) and len(work_load_list) == len(ctx), \
-            "Invalid settings for work load. "
-        slices = _split_input_slice(self.batch_size, work_load_list)
-
         cur_from = self.cur
-        cur_to = cur_from + self.batch_size
-        if cur_to <= self.size:
-            roidb = [self.roidb[i] for i in range(cur_from, cur_to)]
-        else:
-            pad = cur_to - self.size
-            roidb = self.roidb[cur_from:] + self.roidb[:pad]
-
-        batch_list = []
-        for islice in slices:
-            num_im = islice.stop - islice.start
-            iroidb = [roidb[i] for i in range(islice.start, islice.stop)]
-            batch = minibatch.get_minibatch(iroidb, self.num_classes, self.ctx)
-            batch_list.append(batch)
-
-        all_batch = dict()
-        for key in batch_list[0].keys():
-            all_batch[key] = tensor_vstack([batch[key] for batch in batch_list])
-
-        return all_batch
+        cur_to = min(cur_from + self.batch_size, self.size)
+        roidb = [self.roidb[i] for i in range(cur_from, cur_to)]
+        batch = minibatch.get_minibatch(roidb, self.num_classes)
+        return batch
 
     def _get_test_batch(self):
         """

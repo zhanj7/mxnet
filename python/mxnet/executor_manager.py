@@ -442,6 +442,7 @@ class DataParallelExecutorManager(object):
             self.curr_execgrp = execgrp
         else:
             self.curr_execgrp = self.execgrp
+
         self.curr_execgrp.load_data_batch(data_batch)
 
     def forward(self, is_train=False):
