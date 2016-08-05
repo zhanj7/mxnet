@@ -196,6 +196,11 @@ class SoftmaxOutputOp : public Operator {
         valid_cnt = 1;
       }
       grad *= DType(param_.grad_scale / valid_cnt);
+      if (param_.is_hidden_layer) {
+        Tensor<xpu, 2, DType> o_grad =
+          out_grad[softmaxout_enum::kOut].get_with_shape<xpu, 2, DType>(s2, s);
+        grad *= o_grad;
+      }
     }
   }
 
