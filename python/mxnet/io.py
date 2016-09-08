@@ -1,15 +1,15 @@
 # coding: utf-8
-# pylint: disable=invalid-name, protected-access, fixme, too-many-arguments, W0221, W0201, no-self-use
+# pylint: disable=invalid-name, protected-access, fixme, too-many-arguments, W0221, W0201, no-self-use, no-member
 
 """NDArray interface of mxnet"""
 from __future__ import absolute_import
 from collections import OrderedDict
 
-import ctypes
 import sys
-import numpy as np
+import ctypes
 import logging
 import threading
+import numpy as np
 from .base import _LIB
 from .base import c_array, c_str, mx_uint, py_str
 from .base import DataIterHandle, NDArrayHandle
@@ -352,12 +352,9 @@ class NDArrayIter(DataIter):
             self.data = [(k, array(v.asnumpy()[idx], v.context)) for k, v in self.data]
             self.label = [(k, array(v.asnumpy()[idx], v.context)) for k, v in self.label]
 
-        self.data_list = [x[1] for x in self.data] + [x[1] for x in self.label]
-        self.num_source = len(self.data_list)
-
         # batching
         if last_batch_handle == 'discard':
-            new_n = self.data_list[0].shape[0] - self.data_list[0].shape[0] % batch_size
+            new_n = self.data[0][1].shape[0] - self.data[0][1].shape[0] % batch_size
             data_dict = OrderedDict(self.data)
             label_dict = OrderedDict(self.label)
             for k, _ in self.data:
@@ -366,6 +363,9 @@ class NDArrayIter(DataIter):
                 label_dict[k] = label_dict[k][:new_n]
             self.data = data_dict.items()
             self.label = label_dict.items()
+
+        self.data_list = [x[1] for x in self.data] + [x[1] for x in self.label]
+        self.num_source = len(self.data_list)
         self.num_data = self.data_list[0].shape[0]
         assert self.num_data >= batch_size, \
             "batch_size need to be smaller than data size."
@@ -396,10 +396,7 @@ class NDArrayIter(DataIter):
 
     def iter_next(self):
         self.cursor += self.batch_size
-        if self.cursor < self.num_data:
-            return True
-        else:
-            return False
+        return self.cursor < self.num_data
 
     def next(self):
         if self.iter_next():

@@ -11,8 +11,8 @@ import functools
 import operator
 import numpy as np
 from .base import _LIB, string_types, numeric_types
-from .base import c_array, py_str, c_str, mx_real_t
-from .base import mx_uint, mx_float, NDArrayHandle, FunctionHandle
+from .base import c_array, mx_float, py_str, c_str, mx_real_t
+from .base import mx_uint, NDArrayHandle, FunctionHandle
 from .base import ctypes2buffer
 from .base import check_call, ctypes2docstring
 from .context import Context
@@ -1122,8 +1122,8 @@ def _make_ndarray_function(handle):
                 c_array(mx_float, ()), \
                 c_array(NDArrayHandle, (out.handle,)), \
                 ctypes.c_int(len(kwargs)), \
-                c_array(ctypes.c_char_p, [key.encode('ascii') for key in kwargs.keys()]), \
-                c_array(ctypes.c_char_p, [str(i).encode('ascii') for i in kwargs.values()])))
+                c_array(ctypes.c_char_p, [c_str(key) for key in kwargs.keys()]), \
+                c_array(ctypes.c_char_p, [c_str(str(i)) for i in kwargs.values()])))
         return out
 
     def unary_ndarray_function(src, out=None, *args, **kwargs):
@@ -1143,8 +1143,8 @@ def _make_ndarray_function(handle):
                 c_array(mx_float, [args[i] for i in scalar_range]), \
                 c_array(NDArrayHandle, (out.handle,)), \
                 ctypes.c_int(len(kwargs)), \
-                c_array(ctypes.c_char_p, [key.encode('ascii') for key in kwargs.keys()]), \
-                c_array(ctypes.c_char_p, [str(i).encode('ascii') for i in kwargs.values()])))
+                c_array(ctypes.c_char_p, [c_str(key) for key in kwargs.keys()]), \
+                c_array(ctypes.c_char_p, [c_str(str(i)) for i in kwargs.values()])))
         return out
 
     def generic_ndarray_function(*args, **kwargs):
@@ -1176,13 +1176,13 @@ def _make_ndarray_function(handle):
             else:
                 raise TypeError('argument out is required to call %s' % func_name)
         check_call(_LIB.MXFuncInvokeEx( \
-                handle, \
-                c_array(NDArrayHandle, [args[i].handle for i in use_vars_range]), \
-                c_array(mx_float, [args[i] for i in scalar_range]), \
-                c_array(NDArrayHandle, [v.handle for v in mutate_vars]), \
-                ctypes.c_int(len(kwargs)), \
-                c_array(ctypes.c_char_p, [key.encode('ascii') for key in kwargs.keys()]), \
-                c_array(ctypes.c_char_p, [str(i).encode('ascii') for i in kwargs.values()])))
+            handle, \
+            c_array(NDArrayHandle, [args[i].handle for i in use_vars_range]), \
+            c_array(mx_float, [args[i] for i in scalar_range]), \
+            c_array(NDArrayHandle, [v.handle for v in mutate_vars]), \
+            ctypes.c_int(len(kwargs)), \
+            c_array(ctypes.c_char_p, [c_str(key) for key in kwargs.keys()]), \
+            c_array(ctypes.c_char_p, [c_str(str(i)) for i in kwargs.values()])))
         if n_mutate_vars == 1:
             return mutate_vars[0]
         else:

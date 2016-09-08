@@ -21,6 +21,7 @@ class StorageImpl : public Storage {
  public:
   Handle Alloc(size_t size, Context ctx) override;
   void Free(Handle handle) override;
+  void DirectFree(Handle handle) override;
   StorageImpl() {}
   virtual ~StorageImpl() = default;
 
@@ -29,7 +30,13 @@ class StorageImpl : public Storage {
   static constexpr size_t kMaxNumberOfDeviceIDs = Context::kMaxDevID + 1;
 
   template <class DeviceStorage>
-  using CurrentStorageManager =
+  using CPUStorageManager =
+      storage::NaiveStorageManager<DeviceStorage>;
+  template <class DeviceStorage>
+  using PinnedStorageManager =
+      storage::NaiveStorageManager<DeviceStorage>;
+  template <class DeviceStorage>
+  using GPUStorageManager =
       storage::PooledStorageManager<DeviceStorage>;
 
   static void ActivateDevice(Context ctx) {
@@ -63,15 +70,15 @@ Storage::Handle StorageImpl::Alloc(size_t size, Context ctx) {
         storage::StorageManager *ptr = nullptr;
         switch (ctx.dev_type) {
           case Context::kCPU: {
-            ptr = new CurrentStorageManager<storage::CPUDeviceStorage>();
+            ptr = new CPUStorageManager<storage::CPUDeviceStorage>();
             break;
           }
           case Context::kCPUPinned: {
-            ptr = new CurrentStorageManager<storage::PinnedMemoryStorage>();
+            ptr = new PinnedStorageManager<storage::PinnedMemoryStorage>();
             break;
           }
           case Context::kGPU: {
-            ptr = new CurrentStorageManager<storage::GPUDeviceStorage>();
+            ptr = new GPUStorageManager<storage::GPUDeviceStorage>();
             break;
           }
           default: LOG(FATAL) <<  "Unimplemented device " << ctx.dev_type;
@@ -93,6 +100,19 @@ void StorageImpl::Free(Storage::Handle handle) {
       });
   this->ActivateDevice(ctx);
   manager->Free(handle.dptr, handle.size);
+}
+
+void StorageImpl::DirectFree(Storage::Handle handle) {
+  const Context &ctx = handle.ctx;
+  auto&& device = storage_managers_.at(ctx.dev_type);
+  storage::StorageManager *manager = device.Get(
+      ctx.dev_id, []() {
+        LOG(FATAL) <<  "Cannot Free space to a device you have not allocated";
+        return nullptr;
+      });
+  this->ActivateDevice(ctx);
+  // directly free ths data.
+  manager->DirectFree(handle.dptr, handle.size);
 }
 
 std::shared_ptr<Storage> Storage::_GetSharedRef() {
