@@ -37,6 +37,25 @@ void UnaryForward_(const TBlob& src,
 
 // backward function that takes input value of the op
 template<typename xpu, typename OP>
+void UnaryBackward_(const OutputGrad& out_grad,
+                    const EnvArguments& env,
+                    TBlob *in_grad,
+                    OpReqType req,
+                    RunContext ctx) {
+  using namespace mxnet::op;
+  using namespace mshadow::expr;
+  mshadow::Stream<xpu> *s = ctx.get_stream<xpu>();
+  CHECK_EQ(in_grad->type_flag_, out_grad.data.type_flag_)
+    << "Unary function only support input/output with the same type";
+  MSHADOW_TYPE_SWITCH(in_grad->type_flag_, DType, {
+    mshadow::Tensor<xpu, 1, DType> igrad = in_grad->FlatTo1D<xpu, DType>(s);
+    ASSIGN_DISPATCH(igrad, req,
+                    (F<OP>(out_grad.data.FlatTo1D<xpu, DType>(s))));
+  });
+}
+
+// backward function that takes input value of the op
+template<typename xpu, typename OP>
 void UnaryBackwardUseIn_(const OutputGrad& out_grad,
                          const Input0& in_data0,
                          const EnvArguments& env,
@@ -138,6 +157,11 @@ MXNET_REGISTER_SIMPLE_OP(sin, XPU)
 .set_function(XPU::kDevMask, UnaryForward_<XPU, mshadow_op::sin>, kInplaceInOut)
 .set_gradient(XPU::kDevMask, UnaryBackwardUseIn_<XPU, mshadow_op::sin_grad>, kInplaceOutIn)
 .describe("Take sin of the src");
+// negation
+MXNET_REGISTER_SIMPLE_OP(negative, XPU)
+.set_function(XPU::kDevMask, UnaryForward_<XPU, mshadow_op::negation>, kInplaceInOut)
+.set_gradient(XPU::kDevMask, UnaryBackward_<XPU, mshadow_op::negation>, kInplaceOutIn)
+.describe("Take negation of the src");
 
 }  // namespace op
 }  // namespace mxnet
