@@ -162,6 +162,26 @@ class SoftmaxOutputOp : public Operator {
         Tensor<xpu, 3, DType> o_grad =
           out_grad[softmaxout_enum::kOut].get_with_shape<xpu, 3, DType>(s3, s);
         grad *= o_grad;
+        // cancel out previous normalization and normalize against valid grad count
+        // the s3[2] is the number of multi_output, total grad must be normalized by this or valid_cnt (valid multiple output * batch size)
+        index_t valid_grad = 0;
+        if (param_.normalization == softmaxout_enum::kBatch || param_.normalization == softmaxout_enum::kValid) {
+          Tensor<cpu, 3, DType> workspace = ctx.requested[softmaxout_enum::kTempSpace].get_host_space_typed<3, DType>(o_grad.shape_);
+          Copy(workspace, o_grad, o_grad.stream_);
+          for (index_t i = 0; i < workspace.size(0); i++) {
+            for (index_t j = 0; j < workspace.size(1); j++) {
+              for (index_t k = 0; k < workspace.size(2); k++) {
+                if (workspace[i][j][k] > 0) {
+                  valid_grad++;
+                }
+              }
+            }
+          }
+          valid_grad = valid_grad == 0 ? 1 : valid_grad;
+        } else {
+          valid_grad = 1;
+        }
+        grad *= DType(static_cast<float>(param_.normalization == softmaxout_enum::kValid ? 1 : s3[2]) * static_cast<float>(valid_cnt) / static_cast<float>(valid_grad));
       }
     } else {
       int n = out_data[softmaxout_enum::kOut].size(0);
@@ -200,6 +220,23 @@ class SoftmaxOutputOp : public Operator {
         Tensor<xpu, 2, DType> o_grad =
           out_grad[softmaxout_enum::kOut].get_with_shape<xpu, 2, DType>(s2, s);
         grad *= o_grad;
+        // cancel out previous normalization and normalize against valid grad count
+        index_t valid_grad = 0;
+        if (param_.normalization == softmaxout_enum::kBatch || param_.normalization == softmaxout_enum::kValid) {
+          Tensor<cpu, 2, DType> workspace = ctx.requested[softmaxout_enum::kTempSpace].get_host_space_typed<2, DType>(o_grad.shape_);
+          Copy(workspace, o_grad, o_grad.stream_);
+          for (index_t i = 0; i < workspace.size(0); i++) {
+            for (index_t j = 0; j < workspace.size(1); j++) {
+              if (workspace[i][j] > 0) {
+                valid_grad++;
+              }
+            }
+          }
+          valid_grad = valid_grad == 0 ? 1 : valid_grad;
+        } else {
+          valid_grad = 1;
+        }
+        grad *= DType(static_cast<float>(valid_cnt) / static_cast<float>(valid_grad));
       }
     }
   }
