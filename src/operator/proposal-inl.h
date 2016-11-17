@@ -27,7 +27,6 @@ namespace mxnet {
 namespace op {
 
 namespace proposal {
-enum ProposalOpType {kTrain, kTest};
 enum ProposalOpInputs {kClsProb, kBBoxPred, kImInfo};
 enum ProposalOpOutputs {kOut, kScore};
 enum ProposalForwardResource {kTempResource};
@@ -177,28 +176,54 @@ class ProposalOp : public Operator{
 
     // fill in output rois
     for (index_t i = 0; i < out.size(0); ++i) {
-      index_t index = keep[i];
       //batch index 0
       out[i][0] = 0;
-      for (index_t j = 0; j < 4; ++j) {
-        if (i < out_size) {
+      if (i < out_size) {
+        index_t index = keep[i];
+        for (index_t j = 0; j < 4; ++j) {
           out[i][j + 1] =  workspace_ordered_proposals[index][j];
-        } else {
-          out[i][j + 1] = 0;
+        }
+      } else {
+        index_t index = keep[i % out_size];
+        for (index_t j = 0; j < 4; ++j) {
+          out[i][j + 1] = workspace_ordered_proposals[index][j];
         }
       }
     }
 
     // fill in output score
     for (index_t i = 0; i < out_score.size(0); i++) {
-      index_t index = keep[i];
       if (i < out_size) {
+        index_t index = keep[i];
         out_score[i][0] = workspace_ordered_proposals[index][4];
       }
       else {
-        out_score[i][0] = 0;
+        index_t index = keep[i % out_size];
+        out_score[i][0] = workspace_ordered_proposals[index][4];
       }
     }
+  }
+
+  virtual void Backward(const OpContext &ctx,
+                        const std::vector<TBlob> &out_grad,
+                        const std::vector<TBlob> &in_data,
+                        const std::vector<TBlob> &out_data,
+                        const std::vector<OpReqType> &req,
+                        const std::vector<TBlob> &in_grad,
+                        const std::vector<TBlob> &aux_states) {
+    using namespace mshadow;
+    using namespace mshadow::expr;
+    CHECK_EQ(in_grad.size(), 3);
+
+    Stream<xpu> *s = ctx.get_stream<xpu>();
+    Tensor<xpu, 4> gscores = in_grad[proposal::kClsProb].get<xpu, 4, real_t>(s);
+    Tensor<xpu, 4> gbbox = in_grad[proposal::kBBoxPred].get<xpu, 4, real_t>(s);
+    Tensor<xpu, 2> ginfo = in_grad[proposal::kImInfo].get<xpu, 2, real_t>(s);
+
+    // can not assume the grad would be zero
+    Assign(gscores, req[proposal::kClsProb], 0);
+    Assign(gbbox, req[proposal::kBBoxPred], 0);
+    Assign(ginfo, req[proposal::kImInfo], 0);
   }
 
  private:
