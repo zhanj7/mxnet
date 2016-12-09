@@ -169,11 +169,9 @@ class SoftmaxOutputOp : public Operator {
           Tensor<cpu, 3, DType> workspace = ctx.requested[softmaxout_enum::kTempSpace].get_host_space_typed<3, DType>(o_grad.shape_);
           Copy(workspace, o_grad, o_grad.stream_);
           for (index_t i = 0; i < workspace.size(0); i++) {
-            for (index_t j = 0; j < workspace.size(1); j++) {
-              for (index_t k = 0; k < workspace.size(2); k++) {
-                if (workspace[i][j][k] > 0) {
-                  valid_grad++;
-                }
+            for (index_t k = 0; k < workspace.size(2); k++) {
+              if (workspace[i][0][k] > 0) {
+                valid_grad++;
               }
             }
           }
@@ -226,10 +224,8 @@ class SoftmaxOutputOp : public Operator {
           Tensor<cpu, 2, DType> workspace = ctx.requested[softmaxout_enum::kTempSpace].get_host_space_typed<2, DType>(o_grad.shape_);
           Copy(workspace, o_grad, o_grad.stream_);
           for (index_t i = 0; i < workspace.size(0); i++) {
-            for (index_t j = 0; j < workspace.size(1); j++) {
-              if (workspace[i][j] > 0) {
-                valid_grad++;
-              }
+            if (workspace[i][0] > 0) {
+              valid_grad++;
             }
           }
           valid_grad = valid_grad == 0 ? 1 : valid_grad;
