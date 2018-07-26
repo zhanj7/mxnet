@@ -1,5 +1,203 @@
 MXNet Change Log
 ================
+## 1.2.1
+### Deprecations
+The [usage](https://github.com/apache/incubator-mxnet/issues/11091) of `save_params` described in the [gluon book](https://github.com/zackchase/mxnet-the-straight-dope/blob/master/chapter07_distributed-learning/hybridize.ipynb) did not reflect the intended usage of the API and led MXNet users to depend on the unintended usage of `save_params` and `load_params`. In 1.2.0 release an internal bug fix was made which broke the unintended usage use case and users scripts.
+To correct the API change, the behavior of `save_params` API has been reverted to the behavior of MXNet v1.1.0 in v1.2.1. The intended and correct use are now supported with the new APIs `save_parameters` and `load_parameters`.
+With v1.2.1, usage of `save_params` and `load_params` APIs will resume their former functionality and a deprecation warning will appear.
+All scripts to save and load parameters for a Gluon model should use the new APIs: `save_parameters` and `load_parameters`. If your model is hybridizable and you want to export a serialized structure of the model as well as parameters you should migrate your code to use `export` API and the newly added `imports` API instead of `save_params` and `load_params` API. Please refer to the [Saving and Loading Gluon Models Tutorial](http://mxnet.incubator.apache.org/versions/1.2.0/tutorials/gluon/save_load_params.html) for more information.
+
+### User Code Changes
+- If you have been using the `save_params` and `load_params` API, below are the recommendations on how to update your code:
+1. If you save parameters to load it back into a `SymbolBlock`, it is strongly recommended to use `export` and `imports` API instead. For more information, please see the [Saving and Loading Gluon Models Tutorial](http://mxnet.incubator.apache.org/versions/1.2.0/tutorials/gluon/save_load_params.html).
+2. If you created gluon layers without a `name_scope` using MXNet 1.2.0, you must replace `save_params` with `save_parameters`. Otherwise, your models saved in 1.2.1 will fail to load back, although this worked in 1.2.0.
+3. For the other use cases, such as models created within a `name_scope` (inside a `with name_scope()` block) or models being loaded back into gluon and not `SymbolBlock`, we strongly recommend replacing `save_params` and `load_params` with `save_parameters` and `load_parameters`. Having said that, your code won't break in 1.2.1 but will give you a deprecated warning message for `save_params` and `load_params`.
+
+### Incompatible API Changes
+- We are breaking semantic versioning by making a backwards incompatible change from 1.2.0 in the 1.2.1 patch release. The breaking use case is documented in point 2 above. The reason for doing this is because the 1.2.0 release broke a documented [use case](https://github.com/apache/incubator-mxnet/issues/11091) from the [gluon book](https://github.com/zackchase/mxnet-the-straight-dope/blob/master/chapter07_distributed-learning/hybridize.ipynb) and this release reverts the breakage.
+- We did break the promise with semantic versioning due to the API behavior change in 1.2.0 and the backward incompatible change between 1.2.0 and 1.2.1 patch release. The breaking use case is documented in point 2 above. The reason for doing this is because the 1.2.0 release broke a documented [use case](https://github.com/apache/incubator-mxnet/issues/11091) from the [gluon book](https://github.com/zackchase/mxnet-the-straight-dope/blob/master/chapter07_distributed-learning/hybridize.ipynb) and this release reverts the breakage. As a community, we apologize for the inconvenience caused and will continue to strive to uphold semantic versioning.
+
+### Bug Fixes
+- Fixed MKLDNN bugs (#10613, #10021, #10616, #10764, #10591, #10731, #10918, #10706, #10651, #10979).
+- Fixed Scala Inference Memory leak (#11216).
+- Fixed Cross Compilation for armv7 (#11054).
+
+### Performance Improvements
+- Reduced memory consumption from inplace operation for ReLU activation (#10847).
+- Improved `slice` operator performance by 20x (#11124).
+- Improved performance of depthwise convolution by using cudnnv7 if available (#11076).
+- Improved performance and memory usage of Conv1D, by adding back cuDNN support for Conv1D (#11270). This adds a known issue: The cuDNN convolution operator may throw `CUDNN_STATUS_EXECUTION_FAILED` when `req == "add"` and `cudnn_tune != off` with large inputs(e.g. 64k channels). If you encounter this issue, please consider setting `MXNET_CUDNN_AUTOTUNE_DEFAULT` to 0.
+
+## 1.2.0
+### New Features - Added Scala Inference APIs
+- Implemented new [Scala Inference APIs](https://cwiki.apache.org/confluence/display/MXNET/MXNetScalaInferenceAPI) which offer an easy-to-use, Scala Idiomatic and thread-safe high level APIs for performing predictions with deep learning models trained with MXNet (#9678). Implemented a new ImageClassifier class which provides APIs for classification tasks on a Java BufferedImage using a pre-trained model you provide (#10054). Implemented a new ObjectDetector class which provides APIs for object and boundary detections on a Java BufferedImage using a pre-trained model you provide (#10229).
+
+### New Features - Added a Module to Import ONNX models into MXNet
+- Implemented a new ONNX module in MXNet which offers an easy to use API to import ONNX models into MXNet's symbolic interface (#9963). Checkout the [example](https://github.com/apache/incubator-mxnet/blob/master/example/onnx/super_resolution.py) on how you could use this [API](https://cwiki.apache.org/confluence/display/MXNET/ONNX-MXNet+API+Design) to import ONNX models and perform inference on MXNet. Currently, the ONNX-MXNet Import module is still experimental. Please use it with caution.
+
+### New Features - Added Support for Model Quantization with Calibration
+- Implemented model quantization by adopting the [TensorFlow approach](https://www.tensorflow.org/performance/quantization) with calibration by borrowing the idea from Nvidia's [TensorRT](http://on-demand.gputechconf.com/gtc/2017/presentation/s7310-8-bit-inference-with-tensorrt.pdf). The focus of this work is on keeping quantized models (ConvNets for now) inference accuracy loss under control when compared to their corresponding FP32 models. Please see the [example](https://github.com/apache/incubator-mxnet/tree/master/example/quantization) on how to quantize a FP32 model with or without calibration (#9552).
+
+### New Features - MKL-DNN Integration
+- MXNet now integrates with Intel MKL-DNN to accelerate neural network operators: Convolution, Deconvolution, FullyConnected, Pooling, Batch Normalization, Activation, LRN, Softmax, as well as some common operators: sum and concat (#9677). This integration allows NDArray to contain data with MKL-DNN layouts and reduces data layout conversion to get the maximal performance from MKL-DNN. Currently, the MKL-DNN integration is still experimental. Please use it with caution.
+
+### New Features - Added Exception Handling Support for Operators
+- Implemented [Exception Handling Support for Operators](https://cwiki.apache.org/confluence/display/MXNET/Improved+exception+handling+in+MXNet) in MXNet. MXNet now transports backend C++ exceptions to the different language front-ends and prevents crashes when exceptions are thrown during operator execution (#9681).
+
+### New Features - Enhanced FP16 support
+- Added support for distributed mixed precision training with FP16. It supports storing of master copy of weights in float32 with the multi_precision mode of optimizers (#10183). Improved speed of float16 operations on x86 CPU by 8 times through F16C instruction set. Added support for more operators to work with FP16 inputs (#10125, #10078, #10169). Added a tutorial on using mixed precision with FP16 (#10391).
+
+### New Features - Added Profiling Enhancements
+- Enhanced built-in profiler to support native Intel:registered: VTune:tm: Amplifier objects such as Task, Frame, Event, Counter and Marker from both C++ and Python -- which is also visible in the Chrome tracing view(#8972). Added Runtime tracking of symbolic and imperative operators as well as memory and API calls. Added Tracking and dumping of aggregate profiling data. Profiler also no longer affects runtime performance when not in use. 
+
+### Breaking Changes
+- Changed Namespace for MXNet scala from `ml.dmlc.mxnet` to `org.apache.mxnet` (#10284).
+- Changed API for the Pooling operator from `mxnet.symbol.Pooling(data=None, global_pool=_Null, cudnn_off=_Null, kernel=_Null, pool_type=_Null, pooling_convention=_Null, stride=_Null, pad=_Null, name=None, attr=None, out=None, **kwargs)` to  `mxnet.symbol.Pooling(data=None,  kernel=_Null, pool_type=_Null, global_pool=_Null, cudnn_off=_Null, pooling_convention=_Null, stride=_Null, pad=_Null, name=None, attr=None, out=None, **kwargs)`. This is a breaking change when kwargs are not provided since the new api expects the arguments starting from `global_pool` at the fourth position instead of the second position. (#10000).
+
+### Bug Fixes
+- Fixed tests - Flakiness/Bugs - (#9598, #9951, #10259, #10197, #10136, #10422). Please see: [Tests Improvement Project](https://github.com/apache/incubator-mxnet/projects/9)
+- Fixed `cudnn_conv` and `cudnn_deconv` deadlock (#10392).
+- Fixed a race condition in `io.LibSVMIter` when batch size is large (#10124).
+- Fixed a race condition in converting data layouts in MKL-DNN (#9862).
+- Fixed MKL-DNN sigmoid/softrelu issue (#10336).
+- Fixed incorrect indices generated by device row sparse pull (#9887).
+- Fixed cast storage support for same stypes (#10400).
+- Fixed uncaught exception for bucketing module when symbol name not specified (#10094).
+- Fixed regression output layers (#9848).
+- Fixed crash with `mx.nd.ones` (#10014).
+- Fixed `sample_multinomial` crash when `get_prob=True` (#10413).
+- Fixed buggy type inference in correlation (#10135).
+- Fixed race condition for `CPUSharedStorageManager->Free` and launched workers at iter init stage to avoid frequent relaunch (#10096).
+- Fixed DLTensor Conversion for int64 (#10083).
+- Fixed issues where hex symbols of the profiler were not being recognized by chrome tracing tool(#9932)
+- Fixed crash when profiler was not enabled (#10306)
+- Fixed ndarray assignment issues (#10022, #9981, #10468).
+- Fixed incorrect indices generated by device row sparse pull (#9887).
+- Fixed `print_summary` bug in visualization module (#9492).
+- Fixed shape mismatch in accuracy metrics (#10446).
+- Fixed random samplers from uniform and random distributions in R bindings (#10450).
+- Fixed a bug that was causing training metrics to be printed as NaN sometimes (#10437).
+- Fixed a crash with non positive reps for tile ops (#10417).
+
+### Performance Improvements 
+- On average, after the MKL-DNN change, the inference speed of MXNet + MKLDNN outperforms MXNet + OpenBLAS by a factor of 32, outperforms MXNet + MKLML by 82% and outperforms MXNet + MKLML with the experimental flag by 8%. The experiments were run for the image classifcation example, for different networks and different batch sizes.
+- Improved sparse SGD, sparse AdaGrad and sparse Adam optimizer speed on GPU by 30x (#9561, #10312, #10293, #10062).
+- Improved `sparse.retain` performance on CPU by 2.5x (#9722)
+- Replaced `std::swap_ranges` with memcpy (#10351)
+- Implemented DepthwiseConv2dBackwardFilterKernel which is over 5x faster (#10098)
+- Implemented CPU LSTM Inference (#9977)
+- Added Layer Normalization in C++ (#10029)
+- Optimized Performance for rtc (#10018)
+- Improved CPU performance of  ROIpooling operator by using OpenMP (#9958)
+- Accelerated the calculation of F1 (#9833)
+
+### API Changes
+- `Block.save_params` now match parameters according to model structure instead of names to avoid prefix mismatching problems during saving and loading (#10511).
+- Added an optional argument `ctx` to `mx.random.seed`. Seeding with `ctx` option produces random number sequence independent of device id. (#10367).
+- Added copy flag for astype (#10347).
+- Added context parameter to Scala Infer API - ImageClassifier and ObjectDetector (#10252).
+- Added axes support for dropout in gluon (#10032).
+- Added default `ctx` to cpu for `gluon.Block.load_params` (#10160).
+- Added support for variable sequence length in gluon.RecurrentCell (#9934).
+- Added convenience fluent method for squeeze op (#9734).
+- Made `array.reshape` compatible with numpy (#9790).
+- Added axis support and gradient for L2norm (#9740).
+
+### Sparse Support
+- Added support for multi-GPU training with `row_sparse` weights using `device` KVStore (#9987).
+- Added `Module.prepare` API for multi-GPU and multi-machine training with row_sparse weight (#10285).
+- Added `deterministic` option for `contrib.SparseEmbedding` operator (#9846).
+- Added `sparse.broadcast_mul` and `sparse.broadcast_div` with CSRNDArray and 1-D dense NDArray on CPU (#10208).
+- Added sparse support for Custom Operator (#10374).
+- Added Sparse feature for Perl (#9988).
+- Added `force_deterministic` option for sparse embedding (#9882).
+- Added `sparse.where` with condition being csr ndarray (#9481).
+
+### Deprecations
+- Deprecated `profiler_set_state` (#10156).
+
+### Other Features
+- Added constant parameter for gluon (#9893).
+- Added `contrib.rand.zipfian` (#9747).
+- Added Gluon PreLU, ELU, SELU, Swish activation layers for Gluon (#9662)
+- Added Squeeze Op (#9700).
+- Added multi-proposal operator (CPU version) and fixed bug in multi-proposal operator (GPU version) (#9939).
+- Added in Large-Batch SGD with a warmup, and a LARS startegy (#8918).
+- Added Language Modelling datasets and Sampler (#9514).
+- Added instance norm and reflection padding to Gluon (#7938).
+- Added micro-averaging strategy for F1 metric (#9777).
+- Added Softsign Activation Function (#9851).
+- Added eye operator, for default storage type (#9770).
+- Added TVM bridge support to JIT NDArray Function by TVM (#9880).
+- Added float16 support for correlation operator and L2Normalization operator (#10125, #10078).
+- Added random shuffle implementation for NDArray (#10048).
+- Added load from buffer functions for CPP package (#10261).
+
+### Usability Improvements
+- Added embedding learning example for Gluon (#9165).
+- Added tutorial on how to use data augmenters (#10055).
+- Added tutorial for Data Augmentation with Masks (#10178).
+- Added LSTNet example (#9512).
+- Added MobileNetV2 example (#9614).
+- Added tutorial for Gluon Datasets and DataLoaders (#10251).
+- Added Language model with Google's billion words dataset (#10025).
+- Added example for custom operator using RTC (#9870).
+- Improved image classification examples (#9799, #9633).
+- Added reshape predictor function to c_predict_api (#9984).
+- Added guide for implementing sparse ops (#10081).
+- Added naming tutorial for gluon blocks and parameters (#10511).
+
+### Known Issues
+- MXNet crash when built with `USE_GPERFTOOLS = 1` (#8968).
+- [DevGuide.md](https://github.com/google/googletest/blob/ec44c6c1675c25b9827aacd08c02433cccde7780/googlemock/docs/DevGuide.md) in the 3rdparty submodule googletest licensed under CC-BY-2.5.
+- Incompatibility in the behavior of MXNet Convolution operator for certain unsupported use cases: Raises an exception when MKLDNN is enabled, fails silently when it is not.
+- MXNet convolution generates wrong results for 1-element strides (#10689).
+- [Tutorial on fine-tuning an ONNX model](https://github.com/apache/incubator-mxnet/blob/v1.2.0/docs/tutorials/onnx/fine_tuning_gluon.md) fails when using cpu context.
+- [Example in Scala Inference API](https://github.com/apache/incubator-mxnet/tree/master/scala-package/examples/scripts/infer) will fail to download models if data.mxnet.io is down. Please see this PR (#10617) for a workaround, if you face the issue.
+
+For more information and examples, see [full release notes](https://cwiki.apache.org/confluence/display/MXNET/%5BWIP%5D+Apache+MXNet+%28incubating%29+1.2.0+Release+Notes)
+
+## 1.1.0
+### Usability Improvements
+- Improved the usability of examples and tutorials
+### Bug-fixes
+- Fixed I/O multiprocessing for too many open file handles (#8904), race condition (#8995), deadlock (#9126).
+- Fixed image IO integration with OpenCV 3.3 (#8757).
+- Fixed Gluon block printing (#8956).
+- Fixed float16 argmax when there is negative input. (#9149)
+- Fixed random number generator to ensure sufficient randomness. (#9119, #9256, #9300)
+- Fixed custom op multi-GPU scaling (#9283)
+- Fixed gradient of gather_nd when duplicate entries exist in index. (#9200)
+- Fixed overriden contexts in Module `group2ctx` option when using multiple contexts (#8867)
+- Fixed `swap_axes` operator with "add_to" gradient req (#9541)
+### New Features
+- Added experimental API in `contrib.text` for building vocabulary, and loading pre-trained word embeddings, with built-in support for 307 GloVe and FastText pre-trained embeddings. (#8763)
+- Added experimental structural blocks in `gluon.contrib`: `Concurrent`, `HybridConcurrent`, `Identity`. (#9427)
+- Added `sparse.dot(dense, csr)` operator (#8938)
+- Added `Khatri-Rao` operator (#7781)
+- Added `FTML` and `Signum` optimizer (#9220, #9262)
+- Added `ENABLE_CUDA_RTC` build option (#9428)
+### API Changes
+- Added zero gradients to rounding operators including `rint`, `ceil`, `floor`, `trunc`, and `fix` (#9040)
+- Added `use_global_stats` in `nn.BatchNorm` (#9420)
+- Added `axis` argument to `SequenceLast`, `SequenceMask` and `SequenceReverse` operators (#9306)
+- Added `lazy_update` option for standard `SGD` & `Adam` optimizer with `row_sparse` gradients (#9468, #9189)
+- Added `select` option in `Block.collect_params` to support regex (#9348)
+- Added support for (one-to-one and sequence-to-one) inference on explicit unrolled RNN models in R (#9022) 
+### Deprecations
+- The Scala API name space is still called `ml.dmlc`. The name space is likely be changed in a future release to `org.apache` and might brake existing applications and scripts (#9579, #9324)
+### Performance Improvements
+- Improved GPU inference speed by 20% when batch size is 1 (#9055)
+- Improved `SequenceLast` operator speed (#9306)
+- Added multithreading for the class of broadcast_reduce operators on CPU (#9444)
+- Improved batching for GEMM/TRSM operators with large matrices on GPU (#8846)
+### Known Issues
+- "Predict with pre-trained models" tutorial is broken
+- "example/numpy-ops/ndarray_softmax.py" is broken
+
+For more information and examples, see [full release notes](https://cwiki.apache.org/confluence/display/MXNET/Apache+MXNet+%28incubating%29+1.1.0+Release+Notes)
+
+
 ## 1.0.0
 ### Performance
   - Enhanced the performance of `sparse.dot` operator.

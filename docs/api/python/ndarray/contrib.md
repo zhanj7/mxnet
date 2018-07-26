@@ -34,6 +34,7 @@ In the rest of this document, we list routines provided by the `ndarray.contrib`
 .. autosummary::
     :nosignatures:
 
+    AdaptiveAvgPooling2D
     BilinearResize2D
     CTCLoss
     DeformableConvolution

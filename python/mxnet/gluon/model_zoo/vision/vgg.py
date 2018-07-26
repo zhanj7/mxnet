@@ -24,6 +24,8 @@ __all__ = ['VGG',
            'vgg11_bn', 'vgg13_bn', 'vgg16_bn', 'vgg19_bn',
            'get_vgg']
 
+import os
+
 from ....context import cpu
 from ....initializer import Xavier
 from ...block import HybridBlock
@@ -91,7 +93,8 @@ vgg_spec = {11: ([1, 1, 2, 2, 2], [64, 128, 256, 512, 512]),
 
 
 # Constructors
-def get_vgg(num_layers, pretrained=False, ctx=cpu(), root='~/.mxnet/models', **kwargs):
+def get_vgg(num_layers, pretrained=False, ctx=cpu(),
+            root=os.path.join('~', '.mxnet', 'models'), **kwargs):
     r"""VGG model from the `"Very Deep Convolutional Networks for Large-Scale Image Recognition"
     <https://arxiv.org/abs/1409.1556>`_ paper.
 
@@ -111,8 +114,8 @@ def get_vgg(num_layers, pretrained=False, ctx=cpu(), root='~/.mxnet/models', **k
     if pretrained:
         from ..model_store import get_model_file
         batch_norm_suffix = '_bn' if kwargs.get('batch_norm') else ''
-        net.load_params(get_model_file('vgg%d%s'%(num_layers, batch_norm_suffix),
-                                       root=root), ctx=ctx)
+        net.load_parameters(get_model_file('vgg%d%s'%(num_layers, batch_norm_suffix),
+                                           root=root), ctx=ctx)
     return net
 
 def vgg11(**kwargs):

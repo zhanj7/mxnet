@@ -17,12 +17,14 @@
 
 """Test converted models layer by layer
 """
-import os
 import argparse
 import logging
-import mxnet as mx
-import cv2
+import os
+import warnings
+
 import numpy as np
+import cv2
+import mxnet as mx
 
 logging.basicConfig(level=logging.INFO)
 
@@ -275,8 +277,8 @@ def compare_layers_from_nets(caffe_net, arg_params, aux_params, exe, layer_name_
             pass
 
         else:
-            logging.warn('No handling for layer %s of type %s, should we ignore it?', layer.name,
-                         layer.type)
+            warnings.warn('No handling for layer %s of type %s, should we ignore it?', layer.name,
+                          layer.type)
 
         return
 
@@ -339,7 +341,8 @@ def main():
     parser = argparse.ArgumentParser(
         description='Tool for testing caffe to mxnet conversion layer by layer')
     parser.add_argument('--image_url', type=str,
-                        default='http://writm.com/wp-content/uploads/2016/08/Cat-hd-wallpapers.jpg',
+                        default='https://github.com/dmlc/web-data/raw/master/mxnet/doc/'\
+                                'tutorials/python/predict_image/cat.jpg',
                         help='input image to test inference, can be either file path or url')
     parser.add_argument('--caffe_prototxt_path', type=str,
                         default='./model.prototxt',
