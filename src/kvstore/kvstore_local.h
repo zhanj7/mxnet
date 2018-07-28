@@ -34,6 +34,8 @@
 #include <functional>
 #include <algorithm>
 #include "./comm.h"
+#include "./kvstore_utils.h"
+#include "../ndarray/ndarray_function.h"
 
 namespace mxnet {
 namespace kvstore {
@@ -223,14 +225,11 @@ class KVStoreLocal : public KVStore {
                << "PullRowSparse expects row_sparse src NDArray";
       auto &target_val_rowids = grouped_val_rowids[i];
       const size_t num_vals = target_val_rowids.size();
-      for (size_t i = 0; i < num_vals; i++) {
-        auto &row_id = target_val_rowids[i].second;
-        NDArray indices(row_id.shape(), pinned_ctx_, false, mshadow::kInt64);
-        CopyFromTo(row_id, &indices, 0);
-        Unique(&indices, priority);
-        target_val_rowids[i].second = indices;
+      for (size_t j = 0; j < num_vals; j++) {
+        auto &row_id = target_val_rowids[j].second;
+        target_val_rowids[j].second = Unique(row_id, local.ctx(), 0);
       }
-      comm_->BroadcastRowSparse(key, local, grouped_val_rowids[i], false, priority);
+      comm_->BroadcastRowSparse(key, local, grouped_val_rowids[i], priority);
     }
   }
 
@@ -353,28 +352,60 @@ class KVStoreLocal : public KVStore {
     }
   }
 
-  /**
-   * \brief sort and get unique values. Output is expected to be on cpu_pinned context
+  /*
+   * \brief Compute the unique values in data and store them in ascending order
+   * in an int64_t row_sparse ndarray on ctx. The opeartion is async. The result
+   * row_sparse ndarray stores the unique values in out.data(). The aux_data()
+   * contains values that are not necessarily meaningful and should be ignored.
+   * \param data the input data
+   * \param ctx the target context
+   * \param priority the priority of the operation
    */
-  void Unique(NDArray *out, int priority = 0) {
-    CHECK_EQ(out->ctx().dev_mask(), pinned_ctx_.dev_mask())
-             << "Unique expects input with `pinned_ctx_`";
+  NDArray Unique(const NDArray &data, Context ctx, int priority) {
+    // create kRowSparseStorage output ndarray
+    const size_t num_elements = data.shape().Size();
+    NDArray out(kRowSparseStorage, mshadow::Shape2(num_elements, 1),
+                ctx, true, mshadow::kInt64);
+    bool diff_ctx = data.ctx() != ctx;
+    NDArray data_in_ctx = diff_ctx ? NDArray(data.shape(), ctx, true, data.dtype()) : data;
+    // if data == data_in_ctx, CopyFromTo is smart enough to skip the copy
+    CopyFromTo(data, &data_in_ctx, priority);
+    Resource rsc = ResourceManager::Get()->Request(out.ctx(),
+      ResourceRequest(ResourceRequest::kTempSpace));
+    // GPU requires temp resources
+    std::vector<Engine::VarHandle> mutate_vars{out.var()};
+    if (out.ctx().dev_mask() == gpu::kDevMask) mutate_vars.emplace_back(rsc.var);
     Engine::Get()->PushAsync(
-      [out](RunContext rctx, Engine::CallbackOnComplete on_complete) {
-        NDArray *output = out;
-        CHECK_EQ(out->shape().ndim(), 1) << "Unique expects 1D inputs";
-        const auto size = out->shape()[0];
-        auto out_data = output->data();
-        MSHADOW_IDX_TYPE_SWITCH(out_data.type_flag_, IType, {
-          auto dptr = output->data().dptr<IType>();
-          common::ParallelSort(dptr, dptr + size, omp_get_max_threads());
-          auto num_unique_idx = std::unique(dptr, dptr + size) - dptr;
-          *output = output->Reshape(mshadow::Shape1(num_unique_idx));
-        });
+      [=](RunContext rctx, Engine::CallbackOnComplete on_complete) {
+        // copy data.data() to out.data()
+        out.CheckAndAlloc({mshadow::Shape1(num_elements)});
+        TBlob out_data = out.data();
+        switch (out.ctx().dev_mask()) {
+          case cpu::kDevMask: {
+            mshadow::Stream<cpu> *s = rctx.get_stream<cpu>();
+            ndarray::Copy<cpu, cpu>(data_in_ctx.data(), &out_data,
+                                    ctx, ctx, rctx);
+            UniqueImpl(rsc, s, out);
+            break;
+          }
+  #if MXNET_USE_CUDA
+          case gpu::kDevMask: {
+            mshadow::Stream<gpu> *s = rctx.get_stream<gpu>();
+            ndarray::Copy<gpu, gpu>(data_in_ctx.data(), &out_data,
+                                    ctx, ctx, rctx);
+            UniqueImpl(rsc, s, out);
+            // wait for GPU operations to complete
+            s->Wait();
+            break;
+          }
+  #endif
+          default:
+            LOG(FATAL) << MXNET_GPU_NOT_ENABLED_ERROR;
+        }
         on_complete();
-      }, pinned_ctx_, {}, {out->var()},
-      FnProperty::kCPUPrioritized, priority, PROFILER_MESSAGE("KVStoreUnique"));
-    out->WaitToRead();
+      }, out.ctx(), {data_in_ctx.var()}, mutate_vars,
+      FnProperty::kNormal, priority, "KVStoreUnique");
+    return out;
   }
 
   /// reducer and broadcaster

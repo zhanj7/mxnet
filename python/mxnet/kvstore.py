@@ -83,6 +83,14 @@ def _updater_wrapper(updater):
         updater(key, lhs, rhs)
     return updater_handle
 
+def _get_kvstore_server_command_type(command):
+    command_types = {'kController': 0,
+                     'kSetMultiPrecision': 1,
+                     'kStopServer': 2,
+                     'kSyncMode': 3,
+                     'kSetGradientCompression': 4}
+    assert (command in command_types), "Unknown command type to send to server"
+    return command_types[command]
 
 class KVStore(object):
     """A key-value store for synchronization of values, over multiple devices."""
@@ -298,7 +306,8 @@ class KVStore(object):
 
     def row_sparse_pull(self, key, out=None, priority=0, row_ids=None):
         """ Pulls a single RowSparseNDArray value or a sequence of RowSparseNDArray values \
-        from the store with specified row_ids.
+        from the store with specified row_ids. When there is only one row_id, KVStoreRowSparsePull \
+        is invoked just once and the result is broadcast to all the rest of outputs.
 
         `row_sparse_pull` is executed asynchronously after all previous
         `pull`/`row_sparse_pull` calls and the last `push` call for the
@@ -320,7 +329,7 @@ class KVStore(object):
             other pull actions.
 
         row_ids : NDArray or list of NDArray
-            The row_ids for which to pull for each value. Each row_id is an 1D NDArray \
+            The row_ids for which to pull for each value. Each row_id is an 1-D NDArray \
             whose values don't have to be unique nor sorted.
 
         Examples
@@ -349,7 +358,17 @@ class KVStore(object):
         """
         assert(out is not None)
         assert(row_ids is not None)
-        ckeys, cvals, use_str_keys = _ctype_key_value(key, out)
+        if isinstance(row_ids, NDArray):
+            row_ids = [row_ids]
+        assert(isinstance(row_ids, list)), \
+            "row_ids should be NDArray or list of NDArray"
+        first_out = out
+        # whether row_ids are the same
+        single_rowid = False
+        if len(row_ids) == 1 and isinstance(out, list):
+            single_rowid = True
+            first_out = [out[0]]
+        ckeys, cvals, use_str_keys = _ctype_key_value(key, first_out)
         _, crow_ids, _ = _ctype_key_value(key, row_ids)
         assert(len(crow_ids) == len(cvals)), \
                "the number of row_ids doesn't match the number of values"
@@ -359,6 +378,11 @@ class KVStore(object):
         else:
             check_call(_LIB.MXKVStorePullRowSparse(
                 self.handle, mx_uint(len(ckeys)), ckeys, cvals, crow_ids, ctypes.c_int(priority)))
+        # the result can be copied to other devices without invoking row_sparse_pull
+        # if the indices are the same
+        if single_rowid:
+            for out_i in out[1:]:
+                out[0].copyto(out_i)
 
     def set_gradient_compression(self, compression_params):
         """ Specifies type of low-bit quantization for gradient compression \
@@ -408,7 +432,7 @@ class KVStore(object):
             Other keys in this dictionary are optional and specific to the type
             of gradient compression.
         """
-        if ('device' in self.type) or ('dist' in self.type):
+        if ('device' in self.type) or ('dist' in self.type): # pylint: disable=unsupported-membership-test
             ckeys, cvals = _ctype_dict(compression_params)
             check_call(_LIB.MXKVStoreSetGradientCompression(self.handle,
                                                             mx_uint(len(compression_params)),
@@ -450,14 +474,18 @@ class KVStore(object):
         check_call(_LIB.MXKVStoreIsWorkerNode(ctypes.byref(is_worker)))
 
         # pylint: disable=invalid-name
-        if 'dist' in self.type and is_worker.value:
+        if 'dist' in self.type and is_worker.value: # pylint: disable=unsupported-membership-test
             # send the optimizer to server
             try:
                 # use ASCII protocol 0, might be slower, but not a big ideal
-                optim_str = pickle.dumps(optimizer, 0)
+                optim_str = py_str(pickle.dumps(optimizer, 0))
             except:
                 raise
-            self._send_command_to_servers(0, optim_str)
+            cmd = _get_kvstore_server_command_type('kController')
+            self._send_command_to_servers(cmd, optim_str)
+            if optimizer.multi_precision:
+                cmd = _get_kvstore_server_command_type('kSetMultiPrecision')
+                self._send_command_to_servers(cmd, '')
         else:
             self._set_updater(opt.get_updater(optimizer))
 

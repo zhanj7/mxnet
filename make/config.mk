@@ -1,3 +1,20 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 #-------------------------------------------------------------------------------
 #  Template configuration for compiling mxnet
 #
@@ -30,10 +47,7 @@ DEV = 0
 # whether compile with debug
 DEBUG = 0
 
-# whether compile with profiler
-USE_PROFILER =
-
-# whether to turn on signal handler (e.g. segfault logger)
+# whether to turn on segfault signal handler to log the stack trace
 USE_SIGNAL_HANDLER =
 
 # the additional link flags you want to add
@@ -53,6 +67,9 @@ USE_CUDA = 0
 # if you have already add them to environment variable, leave it as NONE
 # USE_CUDA_PATH = /usr/local/cuda
 USE_CUDA_PATH = NONE
+
+# whether to enable CUDA runtime compilation
+ENABLE_CUDA_RTC = 1
 
 # whether use CuDNN R3 library
 USE_CUDNN = 0
@@ -75,20 +92,8 @@ USE_LIBJPEG_TURBO_PATH = NONE
 # use openmp for parallelization
 USE_OPENMP = 1
 
-# MKL ML Library for Intel CPU/Xeon Phi
-# Please refer to MKL_README.md for details
-
-# MKL ML Library folder, need to be root for /usr/local
-# Change to User Home directory for standard user
-# For USE_BLAS!=mkl only
-MKLML_ROOT=/usr/local
-
-# whether use MKL2017 library
-USE_MKL2017 = 0
-
-# whether use MKL2017 experimental feature for high performance
-# Prerequisite USE_MKL2017=1
-USE_MKL2017_EXPERIMENTAL = 0
+# whether use MKL-DNN library
+USE_MKLDNN = 0
 
 # whether use NNPACK library
 USE_NNPACK = 0
@@ -110,21 +115,13 @@ USE_LAPACK = 1
 # path to lapack library in case of a non-standard installation
 USE_LAPACK_PATH =
 
-# by default, disable lapack when using MKL
-# switch on when there is a full installation of MKL available (not just MKL2017/MKL_ML)
-ifeq ($(USE_BLAS), mkl)
-USE_LAPACK = 0
-endif
-
 # add path to intel library, you may need it for MKL, if you did not add the path
 # to environment variable
 USE_INTEL_PATH = NONE
 
 # If use MKL only for BLAS, choose static link automatically to allow python wrapper
-ifeq ($(USE_MKL2017), 0)
 ifeq ($(USE_BLAS), mkl)
 USE_STATIC_MKL = 1
-endif
 else
 USE_STATIC_MKL = NONE
 endif
@@ -135,9 +132,18 @@ endif
 ARCH := $(shell uname -a)
 ifneq (,$(filter $(ARCH), armv6l armv7l powerpc64le ppc64le aarch64))
 	USE_SSE=0
+	USE_F16C=0
 else
 	USE_SSE=1
 endif
+
+#----------------------------
+# F16C instruction support for faster arithmetic of fp16 on CPU
+#----------------------------
+# For distributed training with fp16, this helps even if training on GPUs
+# If left empty, checks CPU support and turns it on.
+# For cross compilation, please check support for F16C on target device and turn off if necessary.
+USE_F16C =
 
 #----------------------------
 # distributed computing
@@ -192,11 +198,6 @@ USE_CPP_PACKAGE = 0
 # You also need to add CAFFE_PATH/build/lib to your LD_LIBRARY_PATH
 # CAFFE_PATH = $(HOME)/caffe
 # MXNET_PLUGINS += plugin/caffe/caffe.mk
-
-# whether to use torch integration. This requires installing torch.
-# You also need to add TORCH_PATH/install/lib to your LD_LIBRARY_PATH
-# TORCH_PATH = $(HOME)/torch
-# MXNET_PLUGINS += plugin/torch/torch.mk
 
 # WARPCTC_PATH = $(HOME)/warp-ctc
 # MXNET_PLUGINS += plugin/warpctc/warpctc.mk

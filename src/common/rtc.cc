@@ -23,7 +23,7 @@
 #include "../common/cuda_utils.h"
 #include "../operator/operator_common.h"
 
-#if MXNET_USE_CUDA
+#if MXNET_USE_CUDA && MXNET_ENABLE_CUDA_RTC
 
 namespace mxnet {
 namespace rtc {
@@ -178,11 +178,11 @@ void CudaModule::Kernel::Launch(
         p_args.data(), 0));
     CUDA_CALL(cudaStreamSynchronize(s->stream_));
   }, ctx, read_vars, write_vars, FnProperty::kNormal, 0,
-  PROFILER_MESSAGE(mangled_name_.c_str()));
+  mangled_name_.c_str());
 }
 
 
 }  // namespace rtc
 }  // namespace mxnet
 
-#endif  // ((MXNET_USE_CUDA) && (MXNET_USE_NVRTC))
+#endif  // MXNET_USE_CUDA && MXNET_ENABLE_CUDA_RTC

@@ -132,6 +132,7 @@ inline void ROIPoolForward(const Tensor<gpu, 4, Dtype> &out,
   ROIPoolForwardKernel<Dtype><<<dimGrid, dimBlock, 0, stream>>>(
       count, bottom_data, spatial_scale, pad_ratio, channels, height, width,
       pooled_height, pooled_width, bottom_rois, top_data, argmax_data);
+  MSHADOW_CUDA_POST_KERNEL_CHECK(ROIPoolForwardKernel);
 }
 
 template<typename Dtype>
@@ -238,6 +239,7 @@ inline void ROIPoolBackwardAcc(const Tensor<gpu, 4, Dtype> &in_grad,
   ROIPoolBackwardAccKernel<Dtype><<<dimGrid, dimBlock, 0, stream>>>(
       count, top_diff, argmax_data, num_rois, spatial_scale, pad_ratio, channels, height, width,
       pooled_height, pooled_width, bottom_diff, bottom_rois);
+  MSHADOW_CUDA_POST_KERNEL_CHECK(ROIPoolBackwardAccKernel);
 }
 
 }  // namespace cuda
