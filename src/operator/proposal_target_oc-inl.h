@@ -45,6 +45,21 @@ inline void SampleROI(
 );
 
 template <typename DType>
+void BBoxOcclusion(
+  const Tensor<cpu, 2, DType> &boxes,
+  const Tensor<cpu, 2, DType> &query_boxes,
+  const std::vector<DType> gt_assignment,
+  std::vector<DType> &all_occlusion
+);
+
+template <typename DType>
+inline bool ifOcclusion(
+  const Tensor<cpu, 1, DType> &box1,
+  const Tensor<cpu, 1, DType> &box2,
+  const DType area1
+);
+
+template <typename DType>
 void BBoxOverlap(
   const Tensor<cpu, 2, DType> &boxes,
   const Tensor<cpu, 2, DType> &query_boxes,

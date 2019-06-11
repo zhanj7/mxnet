@@ -74,6 +74,7 @@ inline void SampleROI(const Tensor<cpu, 2, DType> &all_rois,
         all_labels[i] = gt_boxes[max_index][4];
         all_occlusion[i] = occlusion[max_index];
     }
+    BBoxOcclusion(all_rois, gt_boxes, gt_assignment, all_occlusion);
   }
   /*
   fg_indexes = np.where(overlaps >= config.TRAIN.FG_THRESH)[0]
@@ -192,6 +193,55 @@ void BBoxOverlap(const Tensor<cpu, 2, DType> &boxes,
         }
     }
 }
+
+template <typename DType>
+void BBoxOcclusion(const Tensor<cpu, 2, DType> &boxes,
+                   const Tensor<cpu, 2, DType> &query_boxes,
+                   const vector<DType> &gt_assignment,
+                   vector<DType> &all_occlusion) {
+    const index_t n = boxes.size(0);
+    const index_t t = query_boxes.size(0);
+    for (index_t i = 0; i < n; ++i) {
+        DType area1 = (boxes[i][2] - boxes[i][0] + 1.f) * (boxes[i][3] - boxes[i][1] + 1.f);
+        if (area1 / (512 * 228) < 0.001 || boxes[i][4] > 3) {
+            all_occlusion[i] = -1.f;
+        }
+        else {
+            index_t j = 0;
+            for (; j < t; ++j) {
+                if (j != gt_assignment[i] && ifOcclusion(boxes[i], query_boxes[j], area1)){
+                    all_occlusion[i] = 1.f;
+                    break;
+                }
+            }
+            if (j == t)
+                all_occlusion[i] = 0.f;
+        }
+    }
+}
+
+template <typename DType>
+inline bool ifOcclusion(const Tensor<cpu, 1, DType> &box1,
+                        const Tensor<cpu, 1, DType> &box2,
+                        const DType area1) {
+    if (box2[4] > 3 || box1[3] > box2[3]) return false;
+    DType area2 = (box2[2] - box2[0] + 1.f) * (box2[3] - box2[1] + 1.f);
+    DType ix1 = max<DType> (box1[0], box2[0]);
+    DType iy1 = max<DType> (box1[1], box2[1]);
+    DType ix2 = min<DType> (box1[2], box2[2]);
+    DType iy2 = min<DType> (box1[3], box2[3]);
+    DType areai = (ix2 - ix1 + 1.f) * (iy2 - iy1 + 1.f);
+    if (ix1 > ix2 || iy1 > iy2) areai = 0.f;
+    if (areai / area2 > 0.f) {
+        if (area2 / (288 * 512) < 0.001)
+            if (area1 / area2 < 10)
+                return true;
+        else if (area1 / area2 > 0.1)
+            return true;
+    }
+    return false;
+}
+
 
 template <typename DType>
 void ExpandBboxRegressionTargets(const Tensor<cpu, 2, DType> &bbox_target_data,
