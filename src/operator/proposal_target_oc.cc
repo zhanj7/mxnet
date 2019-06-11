@@ -74,7 +74,7 @@ inline void SampleROI(const Tensor<cpu, 2, DType> &all_rois,
         all_labels[i] = gt_boxes[max_index][4];
         all_occlusion[i] = occlusion[max_index];
     }
-    BBoxOcclusion(all_rois, gt_boxes, gt_assignment, all_occlusion);
+    BBoxOcclusion(all_rois, gt_boxes, gt_assignment, all_labels, all_occlusion);
   }
   /*
   fg_indexes = np.where(overlaps >= config.TRAIN.FG_THRESH)[0]
@@ -198,12 +198,13 @@ template <typename DType>
 void BBoxOcclusion(const Tensor<cpu, 2, DType> &boxes,
                    const Tensor<cpu, 2, DType> &query_boxes,
                    const vector<DType> &gt_assignment,
+                   const vector<DType> &all_labels,
                    vector<DType> &all_occlusion) {
     const index_t n = boxes.size(0);
     const index_t t = query_boxes.size(0);
     for (index_t i = 0; i < n; ++i) {
         DType area1 = (boxes[i][2] - boxes[i][0] + 1.f) * (boxes[i][3] - boxes[i][1] + 1.f);
-        if (area1 / (512 * 228) < 0.001 || boxes[i][4] > 3) {
+        if (area1 / (512 * 288) < 0.001 || all_labels[i] == 0 || all_labels[i] > 3) {
             all_occlusion[i] = -1.f;
         }
         else {
@@ -224,7 +225,7 @@ template <typename DType>
 inline bool ifOcclusion(const Tensor<cpu, 1, DType> &box1,
                         const Tensor<cpu, 1, DType> &box2,
                         const DType area1) {
-    if (box2[4] > 3 || box1[3] > box2[3]) return false;
+    if (box2[4] > 3 || box1[3] < box2[3]) return false;
     DType area2 = (box2[2] - box2[0] + 1.f) * (box2[3] - box2[1] + 1.f);
     DType ix1 = max<DType> (box1[0], box2[0]);
     DType iy1 = max<DType> (box1[1], box2[1]);
