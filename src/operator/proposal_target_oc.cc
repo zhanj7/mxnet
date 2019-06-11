@@ -73,6 +73,8 @@ inline void SampleROI(const Tensor<cpu, 2, DType> &all_rois,
         max_overlaps[i] = max_value;
         all_labels[i] = gt_boxes[max_index][4];
         all_occlusion[i] = occlusion[max_index];
+        if (max_overlaps[i] < fg_thresh)
+            all_occlusion[i] = -1.f;
     }
     // BBoxOcclusion(all_rois, gt_boxes, gt_assignment, all_labels, all_occlusion);
   }
@@ -90,6 +92,10 @@ inline void SampleROI(const Tensor<cpu, 2, DType> &all_rois,
     } else {
       neg_indexes.push_back(i);
     }
+  }
+  for (index_t i = 0; i < all_occlusion.size(); ++i){
+      if (all_occlusion[i] != -1.f)
+          fg_indexes.push_back(i);
   }
   index_t fg_rois_this_image = min<index_t>(fg_rois_per_image, fg_indexes.size());
   if (fg_indexes.size() > fg_rois_this_image) {
