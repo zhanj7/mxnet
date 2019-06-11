@@ -48,8 +48,8 @@ template <typename DType>
 void BBoxOcclusion(
   const Tensor<cpu, 2, DType> &boxes,
   const Tensor<cpu, 2, DType> &query_boxes,
-  const std::vector<DType> gt_assignment,
-  const std::vector<DType> all_labels,
+  const std::vector<DType> &gt_assignment,
+  const std::vector<DType> &all_labels,
   std::vector<DType> &all_occlusion
 );
 

@@ -74,7 +74,7 @@ inline void SampleROI(const Tensor<cpu, 2, DType> &all_rois,
         all_labels[i] = gt_boxes[max_index][4];
         all_occlusion[i] = occlusion[max_index];
     }
-    BBoxOcclusion(all_rois, gt_boxes, gt_assignment, all_labels, all_occlusion);
+    // BBoxOcclusion(all_rois, gt_boxes, gt_assignment, all_labels, all_occlusion);
   }
   /*
   fg_indexes = np.where(overlaps >= config.TRAIN.FG_THRESH)[0]
@@ -204,14 +204,15 @@ void BBoxOcclusion(const Tensor<cpu, 2, DType> &boxes,
     const index_t t = query_boxes.size(0);
     for (index_t i = 0; i < n; ++i) {
         DType area1 = (boxes[i][2] - boxes[i][0] + 1.f) * (boxes[i][3] - boxes[i][1] + 1.f);
-        if (area1 / (512 * 288) < 0.001 || all_labels[i] == 0 || all_labels[i] > 3) {
+        if (area1 / (512 * 288) < 0.001 || all_labels[i] == 0 || all_labels[i] > 3)
             all_occlusion[i] = -1.f;
-        }
         else {
             index_t j = 0;
             for (; j < t; ++j) {
                 if (j != gt_assignment[i] && ifOcclusion(boxes[i], query_boxes[j], area1)){
                     all_occlusion[i] = 1.f;
+                    // for (index_t k = 0; k < boxes[i].size(0); ++k)
+                    //     std::cout << boxes[i][k] << ' ';
                     break;
                 }
             }
