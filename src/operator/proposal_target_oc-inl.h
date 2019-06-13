@@ -33,6 +33,7 @@ inline void SampleROI(
   const index_t fg_rois_per_image,
   const index_t rois_per_image,
   const index_t num_classes,
+  const float occ_thresh,
   const float fg_thresh,
   const float bg_thresh_hi,
   const float bg_thresh_lo,
@@ -99,6 +100,7 @@ struct ProposalTargetOCParam : public dmlc::Parameter<ProposalTargetOCParam> {
   index_t num_classes;
   index_t image_rois;
   float fg_fraction;
+  float occ_thresh;
   float fg_thresh;
   float bg_thresh_hi;
   float bg_thresh_lo;
@@ -114,6 +116,7 @@ struct ProposalTargetOCParam : public dmlc::Parameter<ProposalTargetOCParam> {
     DMLC_DECLARE_FIELD(fg_thresh).describe("Foreground IOU threshold");
     DMLC_DECLARE_FIELD(bg_thresh_hi).describe("Background IOU upper bound");
     DMLC_DECLARE_FIELD(bg_thresh_lo).describe("Background IOU lower bound");
+    DMLC_DECLARE_FIELD(occ_thresh).describe("threshold of iou");
     DMLC_DECLARE_FIELD(fg_fraction).set_default(0.25f).describe("Fraction of foreground proposals");
     DMLC_DECLARE_FIELD(proposal_without_gt).describe("Do not append ground-truth bounding boxes to output");
     DMLC_DECLARE_FIELD(ohem).set_default(false).describe("Do online hard sample mining");
@@ -268,6 +271,7 @@ class ProposalTargetOCOp : public Operator {
             fg_rois_per_image,
             param_.image_rois,
             param_.num_classes,
+            param_.occ_thresh,
             param_.fg_thresh,
             param_.bg_thresh_hi,
             param_.bg_thresh_lo,
