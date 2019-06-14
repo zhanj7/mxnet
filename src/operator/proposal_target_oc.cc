@@ -94,10 +94,10 @@ inline void SampleROI(const Tensor<cpu, 2, DType> &all_rois,
       neg_indexes.push_back(i);
     }
   }
-  for (index_t i = 0; i < all_occlusion.size(); ++i){
-      if (all_occlusion[i] != -1.f)
-          fg_indexes.push_back(i);
-  }
+  // for (index_t i = 0; i < all_occlusion.size(); ++i){
+  //     if (all_occlusion[i] != -1.f)
+  //         fg_indexes.push_back(i);
+  // }
   index_t fg_rois_this_image = min<index_t>(fg_rois_per_image, fg_indexes.size());
   if (fg_indexes.size() > fg_rois_this_image) {
     random_shuffle(begin(fg_indexes), end(fg_indexes));
