@@ -55,6 +55,12 @@ void BBoxOcclusion(
 );
 
 template <typename DType>
+inline bool hasIntersection (
+  const Tensor<cpu, 1, DType> &box1,
+  const Tensor<cpu, 1, DType> &box2
+);
+
+template <typename DType>
 inline bool ifOcclusion(
   const Tensor<cpu, 1, DType> &box1,
   const Tensor<cpu, 1, DType> &box2,
